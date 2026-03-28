@@ -1,1 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pediatricats Senior Design Prototype Control Panel</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 400px;
+      margin: 40px auto;
+      text-align: center;
+    }
+    button {
+      font-size: 16px;
+      padding: 10px 20px;
+      margin: 8px;
+      width: 120px;
+    }
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
+</head>
 
+<body>
+
+  <h2>Pediatricats Senior Design Prototype Control Panel</h2>
+
+  <button onclick="connect()">Connect</button>
+  <br>
+  <button onclick="sendCommand('ON')">ON</button>
+  <button onclick="sendCommand('OFF')">OFF</button>
+  <button onclick="sendCommand('TOGGLE')">TOGGLE</button>
+
+  <div id="status">Disconnected</div>
+
+<script>
+  const DEVICE_NAME = "NanoESP32-Willow-BLE";
+  const SERVICE_UUID = "55f8a5ee-886f-4929-a3ab-5745cbbceab5";
+  const CHAR_UUID    = "a6a06cf5-71b2-489b-9f03-84dfe6fc6330";
+
+  let characteristic = null;
+
+  async function connect() {
+    try {
+      document.getElementById("status").textContent = "Connecting...";
+
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: DEVICE_NAME }],
+        optionalServices: [SERVICE_UUID]
+      });
+
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      characteristic = await service.getCharacteristic(CHAR_UUID);
+
+      document.getElementById("status").textContent = "Connected ✅";
+    }
+    catch (error) {
+      console.error(error);
+      document.getElementById("status").textContent = "Connection failed";
+    }
+  }
+
+  async function sendCommand(command) {
+    if (!characteristic) {
+      alert("Not connected");
+      return;
+    }
+
+    const data = new TextEncoder().encode(command);
+    await characteristic.writeValue(data);
+
+    console.log("Sent:", command);
+  }
+</script>
+
+</body>
+</html>
