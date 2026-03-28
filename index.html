@@ -24,10 +24,7 @@
 </head>
 
 <body>
-
-  <!-- ===================== -->
   <!-- Login / Password Gate -->
-  <!-- ===================== -->
   <div id="login-section">
     <h2>Access Required</h2>
     <p>Enter password to enable BLE control</p>
@@ -37,9 +34,7 @@
     <div id="login-status"></div>
   </div>
   
-  <!-- ===================== -->
   <!-- BLE Control Panel -->
-  <!-- ===================== -->
   <div id="control-panel" class="hidden">
     <h2>Pediatricats Prototype Control Panel</h2>
 
@@ -54,7 +49,6 @@
 
 
 <script>
-  
   // Configuration
   const DEVICE_NAME = "NanoESP32-Willow-BLE";
   const SERVICE_UUID = "55f8a5ee-886f-4929-a3ab-5745cbbceab5";
@@ -62,7 +56,7 @@
   
   const ACCESS_PASSWORD = "Pocki";
   
-  // State
+  // State Variables
   let unlocked = false;
   let characteristic = null;
 
