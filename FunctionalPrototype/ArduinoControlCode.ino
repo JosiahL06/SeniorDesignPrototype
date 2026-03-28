@@ -1,14 +1,22 @@
 // =============================
-// Control Code
-// Last Updated: 3/28
+// Prototype Control Code
+// https://github.com/JosiahL06/SeniorDesignPrototype/blob/main/FunctionalPrototype/ArduinoControlCode.ino
+// Last Updated: 3/29 by Josiah Laakkonen
 // TODO:
-//       - 
+//        - (in progress) Add BLE security encryption
+//        - Define commands to allow motor testing
+//        - Define commands to allow BLE testing
 // =============================
+// During Runtime:
+//        - LED blinks blue when searching for connection
+//        - LED turns green when connected
+//        - LED blinks red when a command is running
+
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <BLE2902.h>
 #include <BLESecurity.h>
+#include <BLE2902.h>
 
 // =============================
 // BLE Configuration
@@ -18,8 +26,7 @@
 #define CHARACTERISTIC_UUID "a6a06cf5-71b2-489b-9f03-84dfe6fc6330"
 
 // =============================
-// GPIO Pin Configuration
-// NOTE: different from pin numbers printed on board; consult arduino datasheet
+// Arduino Pin Configurations
 // =============================
 #define LED_PIN 2
 
@@ -93,12 +100,12 @@ void setup() {
   BLEDevice::init("NanoESP32-Willow-BLE");
 
   // Enable BLE Security
-  //BLESecurity *pSecurity = new BLESecurity();
-  //pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_ONLY);
-  //pSecurity->setCapability(ESP_IO_CAP_NONE);
-  //pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+  BLESecurity *pSecurity = new BLESecurity();
+  pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_ONLY);
+  pSecurity->setCapability(ESP_IO_CAP_NONE);
+  pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
 
-  // Create BLE Server
+  // Create BLE Server and set server callbacks
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
 
@@ -108,16 +115,12 @@ void setup() {
   // Create BLE Characteristic
   pCharacteristic = pService->createCharacteristic(
                       CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
                       BLECharacteristic::PROPERTY_WRITE
                     );
+  
+  pCharacteristic->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
 
-  // Require encryption
-  //pCharacteristic->setAccessPermissions(
-  //  ESP_GATT_PERM_READ_ENCRYPTED |
-  //  ESP_GATT_PERM_WRITE_ENCRYPTED
-  //);
-
+  // Set command callbacks
   pCharacteristic->setCallbacks(new CommandCallbacks());
   pCharacteristic->addDescriptor(new BLE2902());
 
