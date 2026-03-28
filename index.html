@@ -6,11 +6,12 @@
   <title>Pediatricats Senior Design Prototype Control Panel</title>
   <style>
     :root {
-      --bg: #f7f8fa;
-      --card: #ffffff;
-      --text: #1f2933;
-      --muted: #6b7280;
+      --bg:     #f7f8fa;
+      --card:   #ffffff;
+      --text:   #1f2933;
+      --muted:  #6b7280;
       --accent: #2563eb;
+      --good:   #16a34a;
       --danger: #dc2626;
       --border: #e5e7eb;
     }
@@ -70,13 +71,13 @@
       border-radius: 8px;
       border: none;
       background: var(--accent);
-      color: white;
+      color: var(--card);
       cursor: pointer;
       transition: opacity 0.15s ease;
     }
 
     button.secondary {
-      background: #e5e7eb;
+      background: var(--border);
       color: var(--text);
     }
 
@@ -89,8 +90,8 @@
     }
 
     button.connected {
-      background-color: #16a34a;
-      color: white;
+      background-color: var(--good);
+      color: var(--card);
       cursor: default;
     }
 
@@ -147,6 +148,21 @@
       color: var(--text);
       border-bottom: 1px solid var(--border);
     }
+
+    #data-log {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    #data-log li {
+      font-size: 0.85rem;
+      padding: 4px 0;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
+    }
   </style>
 </head>
 
@@ -157,7 +173,7 @@
     <!-- Login -->
     <div id="login-section">
       <h2>Access Required</h2>
-      <p>Enter password to enable BLE control</p>
+      <p>Enter password to enable BLE connection</p>
 
       <input type="password" id="password-input" placeholder="Password" onkeydown="if (event.key === 'Enter') unlock()">
 
@@ -188,6 +204,11 @@
       <div class="log">
         <div class="log-title">Command Log</div>
         <ul id="command-log"></ul>
+        <button onclick="downloadLog(document.getElementById('command-log'))">Download Command Log</button>
+
+        <div class="log-title">Data Log</div>
+        <ul id="data-log"></ul>
+        <button onclick="downloadLog(document.getElementById('data-log'))">Download Data Log</button>
       </div>
     </div>
   </div>
@@ -203,7 +224,7 @@
     // State Variables
     let unlocked = false;
     let characteristic = null;
-    let statusEl = null;
+    let statusEl = document.getElementById("status");
     let device = null;
     let connected = false;
 
@@ -245,10 +266,6 @@
         await characteristic.writeValue(
           new TextEncoder().encode("PING")
         );
-
-        device.addEventListener("gattserverdisconnected", () => {
-          disconnectBLE();
-        });
 
         connected = true;
 
@@ -320,30 +337,37 @@
       logCommand(`Sent command: ${command}`);
     }
 
-    function onDisconnected() {
-      characteristic = null;
-      document.getElementById("status").textContent = "Disconnected";
-      logCommand(`Disconnected from ${DEVICE_NAME}`);
-    }
-
-    function logCommand(message) {
+    function logCommand(command) {
       const log = document.getElementById("command-log");
       const entry = document.createElement("li");
 
       const time = new Date().toLocaleTimeString();
-      entry.textContent = `[${time}] ${message}`;
+      entry.textContent = `[${time}] ${command}`;
 
       log.prepend(entry);
-
-      // Limit log size
-      if (log.children.length > 20) {
-        log.removeChild(log.lastChild);
-      }
     }
 
-    window.onload = () => {
-      statusEl = document.getElementById("status");
-      setCommandButtonsEnabled(false);
+    function logData(data) {
+      const log = document.getElementById("data-log");
+      const entry = document.createElement("li");
+
+      entry.textContent = data;
+
+      log.prepend(entry);
+    }
+
+    function downloadLog(log) {
+      const items = Array.from(log.querySelectorAll("li")).map(li => li.textContent).reverse();
+      const content = items.join("\n");
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = log.id + ".txt";
+      a.click();
+
+      URL.revokeObjectURL(url);
     };
   </script>
 
