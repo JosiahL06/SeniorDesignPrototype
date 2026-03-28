@@ -26,7 +26,7 @@ This control panel expects the ESP32 firmware to advertise the following:
 
 ## Supported Commands
 
-The control panel sends plain-text commands over BLE:
+The control panel buttons send plain-text commands to the arduino over BLE:
 
 | Command | Action |
 |------|------|
