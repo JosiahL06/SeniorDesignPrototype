@@ -1,141 +1,352 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>Pediatricats Senior Design Prototype Control Panel</title>
   <style>
+    :root {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      --border: #e5e7eb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      font-family: system-ui, sans-serif;
-      max-width: 400px;
-      margin: 40px auto;
-      text-align: center;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 40px 16px;
     }
+
+    .container {
+      max-width: 420px;
+      margin: auto;
+      background: var(--card);
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      font-size: 1rem;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
     button {
-      font-size: 16px;
-      padding: 10px 20px;
-      margin: 8px;
-      width: 120px;
+      width: 100%;
+      padding: 12px;
+      font-size: 0.95rem;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      transition: opacity 0.15s ease;
     }
-    #status {
+
+    button.secondary {
+      background: #e5e7eb;
+      color: var(--text);
+    }
+
+    button:hover {
+      opacity: 0.6;
+    }
+
+    button:active {
+      opacity: 1.0;
+    }
+
+    button.connected {
+      background-color: #16a34a;
+      color: white;
+      cursor: default;
+    }
+
+    button.connected:hover {
+      opacity: 1;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .cmd-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
       margin-top: 20px;
-      font-weight: bold;
+      font-size: 0.9rem;
+      font-weight: 500;
     }
+
     .hidden {
       display: none;
+    }
+
+    .log {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      text-align: left;
+    }
+
+    .log-title {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    #command-log {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    #command-log li {
+      font-size: 0.85rem;
+      padding: 4px 0;
+      color: var(--text);
+      border-bottom: 1px solid var(--border);
     }
   </style>
 </head>
 
 <body>
-  <h1>Pediatricats Prototype Control Panel</h1>
-  
-  <!-- Login / Password Gate -->
-  <div id="login-section">
-    <h2>Access Required</h2>
-    <p>Enter password to enable BLE control</p>
-    <input 
-      type="password" 
-      id="password-input" 
-      placeholder="Password">
-    <br>
-    <button onclick="unlock()">Unlock</button>
-    <div id="login-status"></div>
+  <div class="container">
+    <h1>Pediatricats Prototype Control Panel</h1>
+
+    <!-- Login -->
+    <div id="login-section">
+      <h2>Access Required</h2>
+      <p>Enter password to enable BLE control</p>
+
+      <input type="password" id="password-input" placeholder="Password" onkeydown="if (event.key === 'Enter') unlock()">
+
+      <button onclick="unlock()">Unlock</button>
+      <div id="login-status" class="status"></div>
+    </div>
+
+    <!-- Control Panel -->
+    <div id="control-panel" class="hidden">
+      <button id="connect-btn" onclick="connectBLE()">
+        Connect
+      </button>
+
+      <button id="disconnect-btn" class="hidden secondary" onclick="disconnectBLE()">
+        Disconnect
+      </button>
+
+      <div class="button-row">
+        <button class="secondary cmd-btn" onclick="sendCommand('ON', this)">ON</button>
+        <button class="secondary cmd-btn" onclick="sendCommand('OFF', this)">OFF</button>
+        <button class="secondary cmd-btn" onclick="sendCommand('TOGGLE', this)">TOGGLE</button>
+      </div>
+
+      <div id="status" class="status disconnected">
+        Disconnected
+      </div>
+
+      <div class="log">
+        <div class="log-title">Command Log</div>
+        <ul id="command-log"></ul>
+      </div>
+    </div>
   </div>
-  
-  <!-- BLE Control Panel -->
-  <div id="control-panel" class="hidden">
-    <button onclick="connectBLE()">Connect</button>
-    <br>
-    <button onclick="sendCommand('ON')">ON</button>
-    <button onclick="sendCommand('OFF')">OFF</button>
-    <button onclick="sendCommand('TOGGLE')">TOGGLE</button>
 
-    <div id="status">Disconnected</div>
-  </div>
+  <script>
+    // Configuration
+    const DEVICE_NAME = "NanoESP32-Willow-BLE";
+    const SERVICE_UUID = "55f8a5ee-886f-4929-a3ab-5745cbbceab5";
+    const CHAR_UUID = "a6a06cf5-71b2-489b-9f03-84dfe6fc6330";
 
+    const ACCESS_PASSWORD = "Pocki06";
 
-<script>
-  // Configuration
-  const DEVICE_NAME  = "NanoESP32-Willow-BLE";
-  const SERVICE_UUID = "55f8a5ee-886f-4929-a3ab-5745cbbceab5";
-  const CHAR_UUID    = "a6a06cf5-71b2-489b-9f03-84dfe6fc6330";
-  
-  const ACCESS_PASSWORD = "Pocki06";
-  
-  // State Variables
-  let unlocked = false;
-  let characteristic = null;
+    // State Variables
+    let unlocked = false;
+    let characteristic = null;
+    let statusEl = null;
+    let device = null;
+    let connected = false;
 
-  // Password Gate
-  function unlock() {
-    const entered = document.getElementById("password-input").value;
-    const status  = document.getElementById("login-status");
+    // Password Gate
+    function unlock() {
+      const entered = document.getElementById("password-input").value;
+      const status = document.getElementById("login-status");
 
-    if (entered === ACCESS_PASSWORD) {
-      unlocked = true;
+      if (entered === ACCESS_PASSWORD) {
+        unlocked = true;
 
-      document.getElementById("login-section").classList.add("hidden");
-      document.getElementById("control-panel").classList.remove("hidden");
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("control-panel").classList.remove("hidden");
 
-      status.textContent = "";
-    } else {
-      status.textContent = "Incorrect password";
-      status.style.color = "red";
+        status.textContent = "";
+      } else {
+        status.textContent = "Incorrect password";
+        status.style.color = "red";
+      }
     }
-  }
 
-  // BLE Connection Functions
-  async function connectBLE() {
-    if (!unlocked) return;
+    // BLE Connection Functions
+    async function connectBLE() {
+      if (!unlocked) return;
 
-    try {
-      document.getElementById("status").textContent = "Connecting...";
+      try {
+        document.getElementById("status").textContent = "Connecting..."
+        document.getElementById("status").style.color = "var(--muted)";
 
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ name: DEVICE_NAME }],
-        optionalServices: [SERVICE_UUID]
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: DEVICE_NAME }],
+          optionalServices: [SERVICE_UUID]
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        characteristic = await service.getCharacteristic(CHAR_UUID);
+
+        await characteristic.writeValue(
+          new TextEncoder().encode("PING")
+        );
+
+        device.addEventListener("gattserverdisconnected", () => {
+          disconnectBLE();
+        });
+
+        connected = true;
+
+        /* Enable command buttons */
+        setCommandButtonsEnabled(true);
+
+        /* Update connect button */
+        const connectBtn = document.getElementById("connect-btn");
+        connectBtn.textContent = "Connected";
+        connectBtn.classList.add("connected");
+        connectBtn.disabled = true;
+
+        /* Show disconnect button */
+        document.getElementById("disconnect-btn").classList.remove("hidden");
+
+        /* Status text */
+        statusEl.textContent = "Connected";
+        statusEl.className = "status connected";
+
+        /* Update log */
+        logCommand(`Connected to ${DEVICE_NAME}`);
+      }
+      catch (error) {
+        console.error(error);
+        statusEl.textContent = "Connection failed";
+        statusEl.className = "status disconnected";
+        logCommand(`Connection failed`);
+      }
+    }
+
+    function disconnectBLE() {
+      if (device && device.gatt.connected) {
+        device.gatt.disconnect();
+      }
+
+      connected = false;
+      characteristic = null;
+
+      setCommandButtonsEnabled(false);
+
+      const connectBtn = document.getElementById("connect-btn");
+      connectBtn.textContent = "Connect";
+      connectBtn.classList.remove("connected");
+      connectBtn.disabled = false;
+
+      document.getElementById("disconnect-btn").classList.add("hidden");
+
+      statusEl.textContent = "Disconnected";
+      statusEl.className = "status disconnected";
+
+      logCommand(`Disconnected from ${DEVICE_NAME}`);
+    }
+
+    function setCommandButtonsEnabled(enabled) {
+      document.querySelectorAll(".cmd-btn").forEach(btn => {
+        btn.disabled = !enabled;
       });
-
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(SERVICE_UUID);
-      characteristic = await service.getCharacteristic(CHAR_UUID);
-
-      await characteristic.writeValue(
-       new TextEncoder().encode("PING")
-      );
-
-
-      device.addEventListener("gattserverdisconnected", () => {
-        characteristic = null;
-        document.getElementById("status").textContent = "Disconnected";
-      });
-
-
-      document.getElementById("status").textContent = "Connected";
-    }
-    catch (error) {
-      console.error(error);
-      document.getElementById("status").textContent = "Connection failed";
-    }
-  }
-
-  async function sendCommand(command) {
-    if (!unlocked || !characteristic) {
-      alert("Not connected");
-      return;
     }
 
-    const data = new TextEncoder().encode(command);
-    await characteristic.writeValue(data);
+    async function sendCommand(command) {
+      if (!unlocked || !characteristic) {
+        alert("Not connected");
+        return;
+      }
 
-    console.log("Sent:", command);
-  }
+      const data = new TextEncoder().encode(command);
+      await characteristic.writeValue(data);
 
-  function onDisconnected() {
-    characteristic = null;
-    document.getElementById("status").textContent = "Disconnected";
-  }
-</script>
+      logCommand(`Sent command: ${command}`);
+    }
+
+    function onDisconnected() {
+      characteristic = null;
+      document.getElementById("status").textContent = "Disconnected";
+      logCommand(`Disconnected from ${DEVICE_NAME}`);
+    }
+
+    function logCommand(message) {
+      const log = document.getElementById("command-log");
+      const entry = document.createElement("li");
+
+      const time = new Date().toLocaleTimeString();
+      entry.textContent = `[${time}] ${message}`;
+
+      log.prepend(entry);
+
+      // Limit log size
+      if (log.children.length > 20) {
+        log.removeChild(log.lastChild);
+      }
+    }
+
+    window.onload = () => {
+      statusEl = document.getElementById("status");
+      setCommandButtonsEnabled(false);
+    };
+  </script>
 
 </body>
+
 </html>
