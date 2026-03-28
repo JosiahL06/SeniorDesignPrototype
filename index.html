@@ -20,15 +20,23 @@
       margin-top: 20px;
       font-weight: bold;
     }
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 
 <body>
+  <h1>Pediatricats Prototype Control Panel</h1>
+  
   <!-- Login / Password Gate -->
   <div id="login-section">
     <h2>Access Required</h2>
     <p>Enter password to enable BLE control</p>
-    <input type="password" id="password-input" placeholder="Password">
+    <input 
+      type="password" 
+      id="password-input" 
+      placeholder="Password">
     <br>
     <button onclick="unlock()">Unlock</button>
     <div id="login-status"></div>
@@ -36,8 +44,6 @@
   
   <!-- BLE Control Panel -->
   <div id="control-panel" class="hidden">
-    <h2>Pediatricats Prototype Control Panel</h2>
-
     <button onclick="connectBLE()">Connect</button>
     <br>
     <button onclick="sendCommand('ON')">ON</button>
