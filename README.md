@@ -10,7 +10,7 @@ The control panel runs entirely in the web browser using the Web Bluetooth APIâ€
 
 ## Requirements:
 - Bluetooth-capable device (PC, laptop, or phone)
-- Open link in Chrome or Edge (or any chromium browser should work)
+- Browser with Web BLE (Chrome/Edge/any chromium browser should work, or a Web BLE browser extension)
 - Arduino powered on and nearby (approx. 5-15 meters)
 - Password (sent in teams chat)
 
