@@ -100,7 +100,10 @@
       const service = await server.getPrimaryService(SERVICE_UUID);
       characteristic = await service.getCharacteristic(CHAR_UUID);
 
-      await characteristic.readValue();
+      await characteristic.writeValue(
+       new TextEncoder().encode("PING")
+      );
+
 
       device.addEventListener("gattserverdisconnected", () => {
         characteristic = null;
