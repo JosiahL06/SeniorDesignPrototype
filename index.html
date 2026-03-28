@@ -6,12 +6,12 @@
   <title>Pediatricats Senior Design Prototype Control Panel</title>
   <style>
     :root {
-      --bg:     #f7f8fa;
-      --card:   #ffffff;
-      --text:   #1f2933;
-      --muted:  #6b7280;
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #6b7280;
       --accent: #2563eb;
-      --good:   #16a34a;
+      --good: #16a34a;
       --danger: #dc2626;
       --border: #e5e7eb;
     }
@@ -218,6 +218,7 @@
     const DEVICE_NAME = "NanoESP32-Willow-BLE";
     const SERVICE_UUID = "55f8a5ee-886f-4929-a3ab-5745cbbceab5";
     const CHAR_UUID = "a6a06cf5-71b2-489b-9f03-84dfe6fc6330";
+    const PAIRING_CHAR_UUID = "11111111-2222-3333-4444-555555555555";
 
     const ACCESS_PASSWORD = "Pocki06";
 
@@ -255,17 +256,18 @@
         document.getElementById("status").style.color = "var(--muted)";
 
         device = await navigator.bluetooth.requestDevice({
-          filters: [{ name: DEVICE_NAME }],
-          optionalServices: [SERVICE_UUID]
+          filters: [{
+            services: [SERVICE_UUID]
+          }],
         });
+
+        device.addEventListener('gattserverdisconnected', disconnectBLE);
 
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService(SERVICE_UUID);
         characteristic = await service.getCharacteristic(CHAR_UUID);
-
-        await characteristic.writeValue(
-          new TextEncoder().encode("PING")
-        );
+        
+        await service.getCharacteristic(PAIRING_CHAR_UUID).then(c => c.readValue());
 
         connected = true;
 
@@ -297,11 +299,14 @@
     }
 
     function disconnectBLE() {
-      if (device && device.gatt.connected) {
+      if (!connected) return;
+      connected = false;
+
+      if (device?.gatt?.connected) {
         device.gatt.disconnect();
       }
 
-      connected = false;
+      device = null;
       characteristic = null;
 
       setCommandButtonsEnabled(false);
