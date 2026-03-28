@@ -1,7 +1,7 @@
 // =============================
 // Prototype Control Code
 // https://github.com/JosiahL06/SeniorDesignPrototype/blob/main/FunctionalPrototype/ArduinoControlCode.ino
-// Last Updated: 3/29 by Josiah Laakkonen
+// Last Updated: 3/28 by Josiah Laakkonen
 // TODO:
 //        - Add BLE security encryption
 //        - Define commands to allow motor testing
@@ -13,137 +13,137 @@
 //        - LED blinks red when a command is running
 // =============================
 
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLESecurity.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 
 // =============================
 // BLE Configuration
 // =============================
-#define DEVICE_NAME "NanoESP32-Willow-BLE"
-#define SERVICE_UUID "55f8a5ee-886f-4929-a3ab-5745cbbceab5"
+#define DEVICE_NAME         "NanoESP32-Willow-BLE"
+#define SERVICE_UUID        "55f8a5ee-886f-4929-a3ab-5745cbbceab5"
 #define CHARACTERISTIC_UUID "a6a06cf5-71b2-489b-9f03-84dfe6fc6330"
+#define PAIRING_CHAR_UUID   "11111111-2222-3333-4444-555555555555"
 
 // =============================
 // Arduino Pin Configurations
 // =============================
-#define LED_PIN 2
+// #define ...
 
-BLECharacteristic *pCharacteristic;
+NimBLECharacteristic* pCharacteristic;
+NimBLECharacteristic* pPairingChar;
 bool deviceConnected = false;
 
 // =============================
 // Server Callbacks
 // =============================
-class ServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *pServer) {
-    deviceConnected = true;
-    Serial.println("BLE client connected");
-  }
+class ServerCallbacks : public NimBLEServerCallbacks {
+    void onConnect(NimBLEServer* pServer) {
+        deviceConnected = true;
+        Serial.println("BLE client connected");
+    }
 
-  void onDisconnect(BLEServer *pServer) {
-    deviceConnected = false;
-    Serial.println("BLE client disconnected");
-    pServer->startAdvertising();  // Restart advertising
-  }
+    void onDisconnect(NimBLEServer* pServer) {
+        deviceConnected = false;
+        Serial.println("BLE client disconnected");
+        NimBLEDevice::startAdvertising();
+    }
 };
 
 // =============================
 // Command Callbacks
 // =============================
-class CommandCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic *pCharacteristic) {
-    std::string value = pCharacteristic->getValue();
+class CommandCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* pCharacteristic) {
+        std::string value = pCharacteristic->getValue();
+        if (value.empty()) return;
 
-    if (value.empty()) return;
+        Serial.print("Received command: ");
+        Serial.println(value.c_str());
 
-    Serial.print("Received command: ");
-    Serial.println(value.c_str());
-
-    // =============================
-    // Commands
-    // =============================
-
-    // ON
-    if (value == "ON") {
-      digitalWrite(LED_PIN, HIGH);
-      Serial.println("Pin ON");
+        if (value == "ON") {
+            analogWrite(LED_RED, 255);
+            analogWrite(LED_GREEN, 0);
+            analogWrite(LED_BLUE, 255);
+            Serial.println("Pin ON");
+        }
+        else if (value == "OFF") {
+            analogWrite(LED_RED, 0);
+            analogWrite(LED_GREEN, 255);
+            analogWrite(LED_BLUE, 255);
+            Serial.println("Pin OFF");
+        }
+        else if (value == "TOGGLE") {
+            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+            Serial.println("Pin TOGGLED");
+        }
+        else {
+            Serial.println("Unknown command");
+        }
     }
-    // OFF
-    else if (value == "OFF") {
-      digitalWrite(LED_PIN, LOW);
-      Serial.println("Pin OFF");
-    }
-    // TOGGLE
-    else if (value == "TOGGLE") {
-      digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-      Serial.println("Pin TOGGLED");
-    } else {
-      Serial.println("Unknown command");
-    }
-  }
 };
 
-
+// =============================
+// Setup
+// =============================
 void setup() {
-  Serial.begin(115200);
-  delay(1000);
+    Serial.begin(115200);
+    delay(1000);
 
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+    Serial.println("Starting NimBLE device...");
 
-  Serial.println("Starting BLE device...");
+    // Initialize NimBLE
+    NimBLEDevice::init(DEVICE_NAME);
 
-  // Initialize BLE
-  BLEDevice::init(DEVICE_NAME);
+    // Enable security encryption
+    NimBLEDevice::setSecurityAuth(
+      true,   // bonding
+      false,  // MITM (must be false for Web Bluetooth)
+      true    // LE Secure Connections
+    );
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
 
-  // Enable BLE Security (currently not working)
-  //BLESecurity *pSecurity = new BLESecurity();
-  //pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_ONLY);
-  //pSecurity->setCapability(ESP_IO_CAP_NONE);
-  //pSecurity->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
+    // Optional power tuning
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
 
-  // Create BLE Server and set server callbacks
-  BLEServer *pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new ServerCallbacks());
+    // Create server
+    NimBLEServer* pServer = NimBLEDevice::createServer();
+    pServer->setCallbacks(new ServerCallbacks());
 
-  // Create BLE Service
-  BLEService *pService = pServer->createService(SERVICE_UUID);
+    // Create service
+    NimBLEService* pService = pServer->createService(SERVICE_UUID);
 
-  // Create BLE Characteristic
-  pCharacteristic = pService->createCharacteristic(
-    CHARACTERISTIC_UUID,
-    BLECharacteristic::PROPERTY_WRITE |
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
+    // Create characteristic
+    pCharacteristic = pService->createCharacteristic(
+      CHARACTERISTIC_UUID,
+      NIMBLE_PROPERTY::WRITE |
+      NIMBLE_PROPERTY::NOTIFY
+    );
 
-  //pCharacteristic->setAccessPermissions(
-  //  ESP_GATT_PERM_WRITE_ENCRYPTED
-  //);
+    pCharacteristic->setCallbacks(new CommandCallbacks());
 
-  // Set command callbacks
-  pCharacteristic->setCallbacks(new CommandCallbacks());
-  pCharacteristic->addDescriptor(new BLE2902());
+    pPairingChar = pService->createCharacteristic(
+      PAIRING_CHAR_UUID,
+      NIMBLE_PROPERTY::READ
+    );
 
-  // Initial value
-  pCharacteristic->setValue("Willow says meow (hi)");
+    pCharacteristic->setValue("Willow says meow (hi)");
+    pPairingChar->setValue("pair");
 
-  // Start service
-  pService->start();
+    // Start the service
+    pService->start();
 
-  // Start advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);
-  pAdvertising->setMinPreferred(0x12);
+    // Advertising
+    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->enableScanResponse(true);
+    pAdvertising->start();
 
-  BLEDevice::startAdvertising();
 
-  Serial.println("Willow is advertising");
+    analogWrite(LED_RED, 255);
+    analogWrite(LED_GREEN, 255);
+    analogWrite(LED_BLUE, 0);
+    Serial.println("Willow is advertising");
 }
 
 void loop() {
+    // No loop logic required
 }
