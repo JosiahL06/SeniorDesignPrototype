@@ -25,24 +25,69 @@
 
 <body>
 
-  <h2>Pediatricats Senior Design Prototype Control Panel</h2>
+  <!-- ===================== -->
+  <!-- Login / Password Gate -->
+  <!-- ===================== -->
+  <div id="login-section">
+    <h2>Access Required</h2>
+    <p>Enter password to enable BLE control</p>
+    <input type="password" id="password-input" placeholder="Password">
+    <br>
+    <button onclick="unlock()">Unlock</button>
+    <div id="login-status"></div>
+  </div>
+  
+  <!-- ===================== -->
+  <!-- BLE Control Panel -->
+  <!-- ===================== -->
+  <div id="control-panel" class="hidden">
+    <h2>Pediatricats Prototype Control Panel</h2>
 
-  <button onclick="connect()">Connect</button>
-  <br>
-  <button onclick="sendCommand('ON')">ON</button>
-  <button onclick="sendCommand('OFF')">OFF</button>
-  <button onclick="sendCommand('TOGGLE')">TOGGLE</button>
+    <button onclick="connectBLE()">Connect</button>
+    <br>
+    <button onclick="sendCommand('ON')">ON</button>
+    <button onclick="sendCommand('OFF')">OFF</button>
+    <button onclick="sendCommand('TOGGLE')">TOGGLE</button>
 
-  <div id="status">Disconnected</div>
+    <div id="status">Disconnected</div>
+  </div>
+
 
 <script>
+  
+  // Configuration
   const DEVICE_NAME = "NanoESP32-Willow-BLE";
   const SERVICE_UUID = "55f8a5ee-886f-4929-a3ab-5745cbbceab5";
   const CHAR_UUID    = "a6a06cf5-71b2-489b-9f03-84dfe6fc6330";
-
+  
+  const ACCESS_PASSWORD = "Pocki";
+  
+  // State
+  let unlocked = false;
   let characteristic = null;
 
-  async function connect() {
+  // Password Gate
+  function unlock() {
+    const entered = document.getElementById("password-input").value;
+    const status  = document.getElementById("login-status");
+
+    if (entered === ACCESS_PASSWORD) {
+      unlocked = true;
+
+      document.getElementById("login-section").classList.add("hidden");
+      document.getElementById("control-panel").classList.remove("hidden");
+
+      status.textContent = "";
+    } else {
+      status.textContent = "Incorrect password";
+      status.style.color = "red";
+    }
+  }
+
+  // BLE Connection Functions
+  async function connectBLE() {
+    if (!unlocked) return;
+
     try {
       document.getElementById("status").textContent = "Connecting...";
 
@@ -55,7 +100,12 @@
       const service = await server.getPrimaryService(SERVICE_UUID);
       characteristic = await service.getCharacteristic(CHAR_UUID);
 
-      document.getElementById("status").textContent = "Connected ✅";
+      device.addEventListener(
+        "gattserverdisconnected",
+        onDisconnected
+      );
+
+      document.getElementById("status").textContent = "Connected";
     }
     catch (error) {
       console.error(error);
@@ -64,7 +114,7 @@
   }
 
   async function sendCommand(command) {
-    if (!characteristic) {
+    if (!unlocked || !characteristic) {
       alert("Not connected");
       return;
     }
@@ -73,6 +123,11 @@
     await characteristic.writeValue(data);
 
     console.log("Sent:", command);
+  }
+
+  function onDisconnected() {
+    characteristic = null;
+    document.getElementById("status").textContent = "Disconnected";
   }
 </script>
 
