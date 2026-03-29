@@ -1,20 +1,3 @@
-// =============================
-// Bluetooth Testing Control Code
-// https://github.com/JosiahL06/SeniorDesignPrototype/blob/main/BluetoothTest/BLETestCode
-// Last Updated: 3/28 by Josiah Laakkonen
-// =============================
-// Test Metrics (what we are measuring/tracking):
-//  - Timestamp when data was collected in miliseconds
-//  - Packet Error Rate
-//  - Average Latency in microseconds
-//  - Average Jitter in microseconds
-//  - Throughput in kilobites per second
-//  - Received Signal Strength Indicator
-// =============================
-// TODO:
-//        - 
-// =============================
-
 #include <NimBLEDevice.h>
 
 // =============================
@@ -53,7 +36,7 @@ struct __attribute__((packed)) BlePacket {
 //  - Packet Error Rate * 10000 (e.g., 1.23% PER becomes 123)
 //  - Average Latency in microseconds
 //  - Average Jitter in microseconds
-//  - Throughput in kilobites per second * 100 (e.g., 312.50 kbps becomes 31250)
+//  - Throughput in kilobites per second * 100 (e.g., 312.05 kbps becomes 31205)
 //  - Received Signal Strength Indicator
 // =============================
 struct __attribute__((packed)) MetricsPacket {
@@ -108,10 +91,6 @@ class CommandCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* c) override {
     std::string value = c->getValue();
     if (value.empty()) return;
-
-    // =============================
-    // Commands
-    // =============================
 
     // =============================
     // Metric Packets (Binary)
