@@ -3,7 +3,6 @@
 // https://github.com/JosiahL06/SeniorDesignPrototype/blob/main/FunctionalPrototype/ArduinoControlCode.ino
 // Last Updated: 3/28 by Josiah Laakkonen
 // TODO:
-//        - Add BLE security encryption
 //        - Define commands to allow motor testing
 //        - Define commands to allow BLE testing
 // =============================
@@ -21,7 +20,6 @@
 #define DEVICE_NAME         "NanoESP32-Willow-BLE"
 #define SERVICE_UUID        "55f8a5ee-886f-4929-a3ab-5745cbbceab5"
 #define CHARACTERISTIC_UUID "a6a06cf5-71b2-489b-9f03-84dfe6fc6330"
-#define PAIRING_CHAR_UUID   "11111111-2222-3333-4444-555555555555"
 
 // =============================
 // Arduino Pin Configurations
@@ -44,7 +42,10 @@ class ServerCallbacks : public NimBLEServerCallbacks {
     void onDisconnect(NimBLEServer* pServer) {
         deviceConnected = false;
         Serial.println("BLE client disconnected");
-        NimBLEDevice::startAdvertising();
+
+        // Restart advertising
+        pServer->getAdvertising()->stop();
+        pServer->getAdvertising()->start();
     }
 };
 
@@ -120,13 +121,7 @@ void setup() {
 
     pCharacteristic->setCallbacks(new CommandCallbacks());
 
-    pPairingChar = pService->createCharacteristic(
-      PAIRING_CHAR_UUID,
-      NIMBLE_PROPERTY::READ
-    );
-
     pCharacteristic->setValue("Willow says meow (hi)");
-    pPairingChar->setValue("pair");
 
     // Start the service
     pService->start();
@@ -134,6 +129,8 @@ void setup() {
     // Advertising
     NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setName(DEVICE_NAME);
+    pAdvertising->setAppearance(0x0000);
     pAdvertising->enableScanResponse(true);
     pAdvertising->start();
 
