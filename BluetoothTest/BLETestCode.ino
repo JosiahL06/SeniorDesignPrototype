@@ -1,9 +1,9 @@
 // =============================
 // BLE Testing Code
-// Last Updated: 3/29 by Josiah Laakkonen
+// Last Updated: 3/30 by Josiah Laakkonen
 // TODO:
 //  - Redesign metrics (99% chance they are irrelevant/garbage data atm)
-//  - 
+//  - Reformat commands as binary
 // =============================
 #include <NimBLEDevice.h>
 
