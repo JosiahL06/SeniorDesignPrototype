@@ -104,10 +104,30 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
       return;
     }
 
-    Serial.print("CMD string received: ");
-    Serial.println(value.c_str());
+    /* UNFINISHED - Code for when commands are formatted in binary
+    switch (value) {
+      case STOP_MOTOR:
+        break;
+      case START_MOTOR:
+        break;
+      case STOP_BT:
+        break;
+      case START_BT:
+        break;
+      default
+    }
+    */
 
-    if (value == "START_BT") {
+    if (value == "START_MOTOR") {
+      pinMode(D2, OUTPUT);
+      digitalWrite(D2, HIGH);
+      delay(2000);
+      digitalWrite(D2, LOW);
+    }
+    else if (value == "STOP_MOTOR") {
+      digitalWrite(D2, LOW);
+    }
+    else if (value == "START_BT") {
       bluetoothTestRunning = true;
 
       rxExpectedSeq = 0;
@@ -125,7 +145,8 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
       bluetoothTestRunning = false;
       Serial.println("STOP_BT command accepted");
     } else {
-      Serial.println("Unknown CMD string");
+      Serial.print("Unknown CMD string: ");
+      Serial.println(value);
     }
   }
 };
