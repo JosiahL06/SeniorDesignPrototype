@@ -1,3 +1,10 @@
+// =============================
+// BLE Testing Code
+// Last Updated: 3/29 by Josiah Laakkonen
+// TODO:
+//  - Redesign metrics (99% chance they are irrelevant/garbage data atm)
+//  - 
+// =============================
 #include <NimBLEDevice.h>
 
 // =============================
@@ -180,6 +187,7 @@ void setup() {
   cmdChar->setValue("Initial");
 
   dataChar = service->createCharacteristic(
+
     DATA_CHAR_UUID,
     NIMBLE_PROPERTY::WRITE_NR);
 
