@@ -1,15 +1,11 @@
 // =============================
 // Prototype Control Code
+// OUTDATED AS OF 3/30
 // https://github.com/JosiahL06/SeniorDesignPrototype/blob/main/FunctionalPrototype/ArduinoControlCode.ino
 // Last Updated: 3/28 by Josiah Laakkonen
 // TODO:
-//        - Define commands to allow motor testing
-//        - Define commands to allow BLE testing
-// =============================
-// LED logic during runtime:
-//        - LED blinks blue when searching for connection
-//        - LED turns green when connected
-//        - LED blinks red when a command is running
+//        - Update BLE connection to reflect changes per BLETestCode.ino
+//        - Update Motor control to reflect changes per MotorControlCode.ino
 // =============================
 
 #include <NimBLEDevice.h>
