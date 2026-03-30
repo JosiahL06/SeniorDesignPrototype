@@ -121,6 +121,17 @@
       display: none;
     }
 
+    .test-btn.running {
+      background-color: var(--running);
+      color: var(--text);
+      cursor: not-allowed;
+      opacity: 1.0;
+    }
+
+    .test-btn.running:hover {
+      opacity: 1.0;
+    }
+
     .log {
       margin-top: 24px;
       padding-top: 12px;
@@ -193,9 +204,16 @@
       </button>
 
       <div class="button-row">
-        <button id="motor-test-btn" class="hidden secondary" onclick="startMotorTest()">Start Motor Test</button>
-        <button id="bluetooth-test-btn" class="hidden secondary" onclick="startBluetoothTest()">Start Bluetooth
-          Test</button>
+        <button id="motor-test-btn" class="test-btn secondary hidden" data-test="motor"
+          data-idle-label="Start Motor Test" data-running-label="Motor Test Running" onclick="startMotorTest()">
+          Start Motor Test
+        </button>
+
+        <button id="bluetooth-test-btn" class="test-btn secondary hidden" data-test="bluetooth"
+          data-idle-label="Start Bluetooth Test" data-running-label="Bluetooth Test Running"
+          onclick="startBluetoothTest()">
+          Start Bluetooth Test
+        </button>
       </div>
 
       <div class="button-row">
@@ -230,7 +248,8 @@
     // State Variables
     let unlocked = false;
     let statusEl = document.getElementById("status");
-    let testRunning = false;
+    let motorTestRunning = false;
+    let bluetoothTestRunning = false;
 
     // Connection States
     let device = null;
@@ -244,7 +263,7 @@
     let sendIntervalMs = 1000; // Interval between packets for bluetooth test in milliseconds
 
     function updateUI() {
-      // ----- Login Section ------
+      // ----- Login Section -----
       const loginSection = document.getElementById("login-section");
       loginSection.classList.toggle("hidden", unlocked);
 
@@ -259,29 +278,44 @@
       connectBtn.disabled = connected;
       connectBtn.textContent = connected ? "Connected" : "Connect";
       connectBtn.classList.toggle("connected", connected);
-
       disconnectBtn.classList.toggle("hidden", !connected);
 
-      // ----- Motor Test Button -----
-      const motorTestBtn = document.getElementById("motor-test-btn");
-      motorTestBtn.disabled = !connected || testRunning;
-      motorTestBtn.classList.toggle("hidden", !connected);
+      // ----- Test Buttons -----
+      const testButtons = document.querySelectorAll(".test-btn");
 
-      // ----- Bluetooth Test Button -----
-      const BTStartBtn = document.getElementById("bluetooth-test-btn");
-      BTStartBtn.disabled = !connected || testRunning;
-      BTStartBtn.classList.toggle("hidden", !connected);
+      testButtons.forEach(btn => {
+        const testType = btn.dataset.test;
+
+        const isRunning =
+          (testType === "motor" && motorTestRunning) ||
+          (testType === "bluetooth" && bluetoothTestRunning);
+
+        // Visibility
+        btn.classList.toggle("hidden", !connected);
+
+        if (connected && isRunning) {
+          btn.disabled = true;
+          btn.classList.add("running");
+          btn.textContent = btn.dataset.runningLabel;
+        } else {
+          btn.disabled = !connected;
+          btn.classList.remove("running");
+          btn.textContent = btn.dataset.idleLabel;
+        }
+      });
 
       // ---- Stop Button -----
       const stopBtn = document.getElementById("stop-btn");
-      stopBtn.disabled = !connected || !testRunning;
-      stopBtn.classList.toggle("hidden", !connected || !testRunning);
+      const anyTestRunning = motorTestRunning || bluetoothTestRunning;
+
+      stopBtn.disabled = !connected || !anyTestRunning;
+      stopBtn.classList.toggle("hidden", !connected || !anyTestRunning);
 
       // ----- Status Text -----
       if (!connected) {
         statusEl.textContent = "Disconnected";
         statusEl.className = "status disconnected";
-      } else if (testRunning) {
+      } else if (anyTestRunning) {
         statusEl.textContent = "Connected — Test Running";
         statusEl.className = "status connected";
       } else {
@@ -382,16 +416,16 @@
         return;
       }
 
-      if (testRunning) {
-        alert("Test already running");
+      if (motorTestRunning) {
+        alert("Motor test already running");
         return;
       }
 
-      testRunning = true;
+      motorTestRunning = true;
       updateUI();
       await sendCommand("START_MOTOR");
       logCommand("Motor test Complete");
-      testRunning = false;
+      motorTestRunning = false;
       updateUI();
     }
 
@@ -402,11 +436,11 @@
         return;
       }
 
-      if (testRunning) {
+      if (bluetoothTestRunning) {
         alert("Bluetooth test already running");
         return;
       }
-      testRunning = true;
+      bluetoothTestRunning = true;
       updateUI();
 
       await flushBLE(); // Ensure any pending BLE operations are complete before starting
@@ -418,7 +452,7 @@
     }
 
     async function sendDataPacket() {
-      if (!testRunning) return;
+      if (!bluetoothTestRunning) return;
 
       // Packet layout must match Arduino's expected format
       // uint32 seq | uint32 timestamp_us | padding
@@ -469,12 +503,11 @@
         return;
       }
 
-      if (testRunning) {
-        await sendCommand("STOP_MOTOR");
-        await sendCommand("STOP_BT");
-      }
+      if (motorTestRunning) await sendCommand("STOP_MOTOR");
+      if (bluetoothTestRunning) await sendCommand("STOP_BT");
 
-      testRunning = false;
+      motorTestRunning = false;
+      bluetoothTestRunning = false;
       updateUI();
       logCommand("Stopped all tests");
     }
