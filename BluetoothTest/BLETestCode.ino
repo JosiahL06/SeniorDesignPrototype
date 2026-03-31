@@ -3,7 +3,6 @@
 // Last Updated: 3/31 by Josiah Laakkonen
 // TODO:
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
-//  - Add simple motor control code to rotate two motors 60 degrees, pause, and rotate back
 //  - Reformat commands as binary
 //  - Add configuration options in command packet (motor actuation degree, reverse option, etc.)
 //  - Add ACK (acknowledgement) characteristic to confirm when other characteristics are received
@@ -27,6 +26,12 @@ const int ledcChannelA = 0;
 const int ledcChannelB = 1;
 const int freq = 5000;
 const int resolution = 8;
+
+// =============================
+// Motor Configuration
+// =============================
+const int MAX_SPEED = 255/8; // max duty cycle (255) / 8 = 12.5% speed
+const int RUN_TIME_MS = 2000;
 
 // =============================
 // BLE Configuration
@@ -143,23 +148,40 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
       Serial.println("START_MOTORS command accepted");
       digitalWrite(AIN1, HIGH);
       digitalWrite(AIN2, LOW);
+      digitalWrite(BIN1, LOW);
+      digitalWrite(BIN2, HIGH);
+      digitalWrite(STBY, HIGH);
+
+      for (int i = 0; i <= MAX_SPEED; i++) {
+        ledcWrite(ledcChannelA, i);
+        ledcWrite(ledcChannelB, i);
+        delay(5);
+      }
+
+      delay(RUN_TIME_MS);
+
+      ledcWrite(ledcChannelA, 0);
+      ledcWrite(ledcChannelB, 0);
+      digitalWrite(STBY, LOW);
+
+    } else if (value == "STOP_MOTOR") {
+      Serial.println("STOP_MOTORS command accepted");
+      digitalWrite(AIN1, LOW);
+      digitalWrite(AIN2, HIGH);
       digitalWrite(BIN1, HIGH);
       digitalWrite(BIN2, LOW);
       digitalWrite(STBY, HIGH);
 
-      for (int i = 0; i <= 255; i++) {
+      for (int i = 0; i <= MAX_SPEED; i++) {
         ledcWrite(ledcChannelA, i);
         ledcWrite(ledcChannelB, i);
         delay(5);
       }
 
-    } else if (value == "STOP_MOTOR") {
-      Serial.println("STOP_MOTORS command accepted");
-      for (int i = 255; i >= 0; i--) {
-        ledcWrite(ledcChannelA, i);
-        ledcWrite(ledcChannelB, i);
-        delay(5);
-      }
+      delay(RUN_TIME_MS);
+
+      ledcWrite(ledcChannelA, 0);
+      ledcWrite(ledcChannelB, 0);
       digitalWrite(STBY, LOW);
 
     } else if (value == "START_BT") {
