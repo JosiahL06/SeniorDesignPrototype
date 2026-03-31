@@ -1,6 +1,6 @@
 // =============================
 // BLE Testing Code
-// Last Updated: 3/30 by Josiah Laakkonen
+// Last Updated: 3/31 by Josiah Laakkonen
 // TODO:
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
 //  - Add simple motor control code to rotate two motors 60 degrees, pause, and rotate back
@@ -11,6 +11,22 @@
 //  - (Optional?) Reformat code to move BLE control into different .cpp and .h files
 // =============================
 #include <NimBLEDevice.h>
+
+// =============================
+// Pin Configuration
+// =============================
+const int PWMA = 8;
+const int AIN2 = 7;
+const int AIN1 = 6;
+const int STBY = 5;
+const int BIN1 = 4;
+const int BIN2 = 3;
+const int PWMB = 2;
+
+const int ledcChannelA = 0;
+const int ledcChannelB = 1;
+const int freq = 5000;
+const int resolution = 8;
 
 // =============================
 // BLE Configuration
@@ -124,15 +140,29 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
     */
 
     if (value == "START_MOTOR") {
-      pinMode(D2, OUTPUT);
-      digitalWrite(D2, HIGH);
-      delay(2000);
-      digitalWrite(D2, LOW);
-    }
-    else if (value == "STOP_MOTOR") {
-      digitalWrite(D2, LOW);
-    }
-    else if (value == "START_BT") {
+      Serial.println("START_MOTORS command accepted");
+      digitalWrite(AIN1, HIGH);
+      digitalWrite(AIN2, LOW);
+      digitalWrite(BIN1, HIGH);
+      digitalWrite(BIN2, LOW);
+      digitalWrite(STBY, HIGH);
+
+      for (int i = 0; i <= 255; i++) {
+        ledcWrite(ledcChannelA, i);
+        ledcWrite(ledcChannelB, i);
+        delay(5);
+      }
+
+    } else if (value == "STOP_MOTOR") {
+      Serial.println("STOP_MOTORS command accepted");
+      for (int i = 255; i >= 0; i--) {
+        ledcWrite(ledcChannelA, i);
+        ledcWrite(ledcChannelB, i);
+        delay(5);
+      }
+      digitalWrite(STBY, LOW);
+
+    } else if (value == "START_BT") {
       bluetoothTestRunning = true;
 
       rxExpectedSeq = 0;
@@ -150,8 +180,7 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
       bluetoothTestRunning = false;
       Serial.println("STOP_BT command accepted");
     } else {
-      Serial.print("Unknown CMD string: ");
-      Serial.println(value);
+      Serial.println("Unknown CMD string");
     }
   }
 };
@@ -193,6 +222,16 @@ void setup() {
   delay(1000);
   Serial.println("Starting NimBLE device...");
 
+  // Configuring motor pins
+  for (int i = 2; i <= 8; i++) {
+    pinMode(i, OUTPUT);
+  }
+
+  ledcSetup(ledcChannelA, freq, resolution);
+  ledcSetup(ledcChannelB, freq, resolution);
+  ledcAttachPin(PWMA, ledcChannelA);
+  ledcAttachPin(PWMB, ledcChannelB);
+
   NimBLEDevice::init(DEVICE_NAME);
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
   NimBLEDevice::setMTU(247);
@@ -207,8 +246,7 @@ void setup() {
 
   cmdChar = service->createCharacteristic(
     CMD_CHAR_UUID,
-    NIMBLE_PROPERTY::WRITE |
-    NIMBLE_PROPERTY::WRITE_NR);
+    NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
 
   cmdChar->setValue("Initial");
 
