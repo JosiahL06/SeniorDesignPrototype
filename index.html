@@ -421,12 +421,10 @@
         return;
       }
 
+      await sendCommand("START_MOTOR");
       motorTestRunning = true;
       updateUI();
-      await sendCommand("START_MOTOR");
-      logCommand("Motor test Complete");
-      motorTestRunning = false;
-      updateUI();
+      logCommand("Motor test started");
     }
 
     async function startBluetoothTest() {
