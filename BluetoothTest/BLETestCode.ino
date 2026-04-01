@@ -1,6 +1,6 @@
 // =============================
 // BLE Testing Code
-// Last Updated: 3/31 by Josiah Laakkonen
+// Last Updated: 4/1 by Josiah Laakkonen
 // TODO:
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
 //  - Add ACK (acknowledgement) characteristic to confirm when other characteristics are received
