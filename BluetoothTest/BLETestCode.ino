@@ -3,8 +3,6 @@
 // Last Updated: 3/31 by Josiah Laakkonen
 // TODO:
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
-//  - Reformat commands as binary
-//  - Add configuration options in command packet (motor actuation degree, reverse option, etc.)
 //  - Add ACK (acknowledgement) characteristic to confirm when other characteristics are received
 //    (This will replace Serial as main debug communication)
 //  - (Optional?) Reformat code to move BLE control into different .cpp and .h files
@@ -28,12 +26,6 @@ const int freq = 5000;
 const int resolution = 8;
 
 // =============================
-// Motor Configuration
-// =============================
-const int MAX_SPEED = 255/8; // max duty cycle (255) / 8 = 12.5% speed
-const int RUN_TIME_MS = 2000;
-
-// =============================
 // BLE Configuration
 // =============================
 #define DEVICE_NAME "NanoESP32-Willow-BLE"
@@ -55,6 +47,52 @@ NimBLECharacteristic* metricsChar;
 // =============================
 bool deviceConnected = false;
 volatile bool bluetoothTestRunning = false;
+
+// =============================
+// Command IDs
+// =============================
+enum CommandId : uint8_t {
+  STOP_MOTOR = 0b00,
+  START_MOTOR = 0b01,
+  STOP_BT = 0b10,
+  START_BT = 0b11
+};
+
+// =============================
+// Command Packet Format to receive data
+// =============================
+struct CommandPacket {
+  uint8_t commandId;
+  bool inSteps;
+  bool reverse;       // valid for motor only
+  uint8_t degrees;    // valid for motor only
+  uint8_t speed;      // valid for motor only
+  uint16_t interval;  // valid for bluetooth only
+};
+
+CommandPacket cmd;
+
+// =============================
+// Function to unpack command info
+// =============================
+CommandPacket unpackCommand(const std::string& value) {
+  CommandPacket cmd;
+
+  const uint8_t* data =
+    reinterpret_cast<const uint8_t*>(value.data());
+
+  uint32_t packet =
+    ((uint32_t)data[0] << 16) | ((uint32_t)data[1] << 8) | ((uint32_t)data[2]);
+
+  cmd.commandId = (packet >> 18) & 0b11;
+  cmd.inSteps = (packet >> 17) & 0b1;
+  cmd.reverse = (packet >> 16) & 0b1;
+  cmd.interval = packet & 0xFFFF;
+  cmd.degrees = (cmd.interval >> 8) & 0xFF;
+  cmd.speed = cmd.interval & 0xFF;
+
+  return cmd;
+}
 
 // =============================
 // Data Packet Format to receive data
@@ -123,89 +161,98 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 // Command Callbacks
 class CmdCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
-    std::string value = c->getValue();
+    const std::string& value = c->getValue();
 
-    if (value.length() == 0) {
-      Serial.println("Received empty CMD string");
+    if (value.length() != 3) {
+      Serial.println("Invalid CMD string");
       return;
     }
 
-    /* UNFINISHED - Code for when commands are formatted in binary
-    switch (value) {
+    cmd = unpackCommand(value);
+
+    switch (cmd.commandId) {
+
       case STOP_MOTOR:
-        break;
+        {
+          Serial.println("Command Received: STOP_MOTOR");
+
+          ledcWrite(ledcChannelA, 0);
+          ledcWrite(ledcChannelB, 0);
+          digitalWrite(STBY, LOW);
+          break;
+        }
       case START_MOTOR:
-        break;
-      case STOP_BT:
-        break;
+        {
+          Serial.println("Command Received: START_MOTOR");
+          Serial.printf(
+            "  Degrees: %u | Speed: %u | InSteps: %d | Reverse: %d\n",
+            cmd.degrees, cmd.speed, cmd.inSteps, cmd.reverse);
+
+          int runTimeMs = 1000 * cmd.degrees / 360 * 100 / cmd.speed;
+          int pwm = 255 * cmd.speed / 100;
+
+          // Direction control
+          if (cmd.reverse) {
+            digitalWrite(AIN1, LOW);
+            digitalWrite(AIN2, HIGH);
+            digitalWrite(BIN1, HIGH);
+            digitalWrite(BIN2, LOW);
+          } else {
+            digitalWrite(AIN1, HIGH);
+            digitalWrite(AIN2, LOW);
+            digitalWrite(BIN1, LOW);
+            digitalWrite(BIN2, HIGH);
+          }
+
+          // Set speed and start motors
+          ledcWrite(ledcChannelA, pwm);
+          ledcWrite(ledcChannelB, pwm);
+          digitalWrite(STBY, HIGH);
+
+          // Allow motors to run
+          delay(runTimeMs);
+
+          // Stop motors
+          ledcWrite(ledcChannelA, 0);
+          ledcWrite(ledcChannelB, 0);
+          digitalWrite(STBY, LOW);
+          break;
+        }
       case START_BT:
-        break;
-      default
-    }
-    */
+        {
+          Serial.println("Command Received: START_BT");
+          Serial.printf(
+            "  Interval: %u ms | InSteps: %d\n",
+            cmd.interval, cmd.inSteps);
 
-    if (value == "START_MOTOR") {
-      Serial.println("START_MOTORS command accepted");
-      digitalWrite(AIN1, HIGH);
-      digitalWrite(AIN2, LOW);
-      digitalWrite(BIN1, LOW);
-      digitalWrite(BIN2, HIGH);
-      digitalWrite(STBY, HIGH);
+          bluetoothTestRunning = true;
 
-      for (int i = 0; i <= MAX_SPEED; i++) {
-        ledcWrite(ledcChannelA, i);
-        ledcWrite(ledcChannelB, i);
-        delay(5);
-      }
-
-      delay(RUN_TIME_MS);
-
-      ledcWrite(ledcChannelA, 0);
-      ledcWrite(ledcChannelB, 0);
-      digitalWrite(STBY, LOW);
-
-    } else if (value == "STOP_MOTOR") {
-      Serial.println("STOP_MOTORS command accepted");
-      digitalWrite(AIN1, LOW);
-      digitalWrite(AIN2, HIGH);
-      digitalWrite(BIN1, HIGH);
-      digitalWrite(BIN2, LOW);
-      digitalWrite(STBY, HIGH);
-
-      for (int i = 0; i <= MAX_SPEED; i++) {
-        ledcWrite(ledcChannelA, i);
-        ledcWrite(ledcChannelB, i);
-        delay(5);
-      }
-
-      delay(RUN_TIME_MS);
-
-      ledcWrite(ledcChannelA, 0);
-      ledcWrite(ledcChannelB, 0);
-      digitalWrite(STBY, LOW);
-
-    } else if (value == "START_BT") {
-      bluetoothTestRunning = true;
-
-      rxExpectedSeq = 0;
-      packetsRx = 0;
-      packetsLost = 0;
-      latencySumUs = 0;
-      latencySamples = 0;
-      jitterSumUs = 0;
-      bytesRx = 0;
-      lastRxTimeUs = 0;
-      statsStartMs = millis();
-
-      Serial.println("START_BT command accepted");
-    } else if (value == "STOP_BT") {
-      bluetoothTestRunning = false;
-      Serial.println("STOP_BT command accepted");
-    } else {
-      Serial.println("Unknown CMD string");
+          // Reset stats
+          rxExpectedSeq = 0;
+          packetsRx = 0;
+          packetsLost = 0;
+          latencySumUs = 0;
+          latencySamples = 0;
+          jitterSumUs = 0;
+          bytesRx = 0;
+          lastRxTimeUs = 0;
+          statsStartMs = millis();
+          break;
+        }
+      case STOP_BT:
+        {
+          Serial.println("Command Received: STOP_BT");
+          bluetoothTestRunning = false;
+          break;
+        }
+      default:
+        {
+          Serial.println("Unknown CMD ID");
+          break;
+        }
     }
   }
-};
+} cmdCallbacks;
 
 // Data Callbacks
 class DataCallbacks : public NimBLECharacteristicCallbacks {
@@ -234,7 +281,7 @@ class DataCallbacks : public NimBLECharacteristicCallbacks {
 
     bytesRx += sizeof(pkt);
   }
-};
+} dataCallbacks;
 
 // =============================
 // Setup - Initialize BLE Connection
@@ -285,8 +332,8 @@ void setup() {
 
   metricsChar->setValue("Initial");
 
-  cmdChar->setCallbacks(new CmdCallbacks());
-  dataChar->setCallbacks(new DataCallbacks());
+  cmdChar->setCallbacks(&cmdCallbacks);
+  dataChar->setCallbacks(&dataCallbacks);
 
   service->start();
 
@@ -308,7 +355,7 @@ void loop() {
   static uint32_t lastMetricsMs = 0;
 
   if (deviceConnected && bluetoothTestRunning) {
-    if (millis() - lastMetricsMs >= 1000) {
+    if (millis() - lastMetricsMs >= cmd.interval) {
       MetricsPacket metrics;
       uint32_t totalPackets = packetsRx + packetsLost;
 
