@@ -132,6 +132,50 @@
       opacity: 1.0;
     }
 
+    .config-box {
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      background: var(--bg);
+    }
+
+    .config-box summary {
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .config-box summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .config-box summary::after {
+      content: "▸";
+      float: right;
+      transition: transform 0.2s ease;
+    }
+
+    .config-box[open] summary::after {
+      transform: rotate(90deg);
+    }
+
+    .config-content {
+      margin-top: 12px;
+    }
+
+    .config-content label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 12px;
+    }
+
+    .config-content .checkbox {
+      margin-top: 16px;
+    }
+
     .log {
       margin-top: 24px;
       padding-top: 12px;
@@ -203,6 +247,59 @@
         Disconnect
       </button>
 
+      <!-- Motor Test Configuration Tab -->
+      <details class="config-box">
+        <summary>Motor Test Configuration</summary>
+
+        <div class="config-content">
+          <label>
+            Rotation Angle (degrees):
+            <input type="range" min="5" max="180" value="70"
+              oninput="motorConfig.degrees = Number(this.value); degreesVal.textContent = this.value;">
+          </label>
+          <div><span id="degreesVal">70</span>°</div>
+
+          <label>
+            Speed:
+            <input type="range" min="1" max="100" value="20"
+              oninput="motorConfig.speed = Number(this.value); speedVal.textContent = this.value;">
+          </label>
+          <div><span id="speedVal">20</span>%</div>
+
+          <label class="checkbox">
+            Rotate in 5 degree steps and wait for user prompt between steps:
+            <input type="checkbox" onchange="motorConfig.inSteps = this.checked;">
+          </label>
+        </div>
+      </details>
+
+      <!-- Bluetooth Test Configuration Tab -->
+      <details class="config-box">
+        <summary>Bluetooth Test Configuration</summary>
+
+        <div class="config-content">
+
+          <label>
+            Packet Interval
+            <div class="value-row">
+              <input type="range" min="50" max="2000" step="50" value="1000" oninput="
+                 bluetoothConfig.sendIntervalMs = Number(this.value);
+                 btIntervalVal.textContent = this.value;
+               ">
+              <span class="value-label">
+                <span id="btIntervalVal">1000</span> ms
+              </span>
+            </div>
+          </label>
+
+          <label class="checkbox">
+            Wait for user prompt between 5 packets:
+            <input type="checkbox" onchange="bluetoothConfig.inSteps = this.checked;">
+          </label>
+
+        </div>
+      </details>
+
       <div class="button-row">
         <button id="motor-test-btn" class="test-btn secondary hidden" data-test="motor"
           data-idle-label="Start Motor Test" data-running-label="Motor Test Running" onclick="startMotorTest()">
@@ -258,9 +355,28 @@
     let metricsChar = null;
     let connected = false;
 
-    // Bluetooth Test Definitions
-    let packetSeq = 0;
-    let sendIntervalMs = 1000; // Interval between packets for bluetooth test in milliseconds
+    // Motor Test Configurations
+    let motorConfig = {
+      degrees: 70, // Degrees to rotate (5-180)
+      speed: 20, // Motor speed percentage (1-100)
+      inSteps: false, // Whether to do rotation in 5 degree steps and wait for user prompt between steps
+      reverse: false // Whether to reverse motor direction
+    };
+    let totalRotation = 0; // Track total rotation for motor test
+
+    // Bluetooth Test Configurations
+    let bluetoothConfig = {
+      sendIntervalMs: 1000, // Interval between packets for bluetooth test in milliseconds (50-2000)
+      inSteps: false // Whether to wait for user prompt between packets instead of sending automatically
+    };
+    let packetSeq = 0; // Sequence number for bluetooth test packets
+    let minIntervalMs = 10; // Minimum interval between packets
+
+    // Command IDs
+    const STOP_MOTOR = 0b00;
+    const START_MOTOR = 0b01;
+    const STOP_BT = 0b10;
+    const START_BT = 0b11;
 
     function updateUI() {
       // ----- Login Section -----
@@ -398,17 +514,6 @@
       logCommand(`Disconnected from ${DEVICE_NAME}`);
     }
 
-    async function sendCommand(command) {
-      if (!connected) {
-        alert("Not connected");
-        return;
-      }
-
-      const data = new TextEncoder().encode(command);
-      await cmdChar.writeValue(data);
-      logCommand(`Sent command: ${command}`);
-    }
-
     async function startMotorTest() {
       if (!connected) {
         alert("Not connected");
@@ -421,10 +526,9 @@
         return;
       }
 
-      await sendCommand("START_MOTOR");
+      await sendCommandPacket(START_MOTOR);
       motorTestRunning = true;
       updateUI();
-      logCommand("Motor test started");
     }
 
     async function startBluetoothTest() {
@@ -443,10 +547,79 @@
 
       await flushBLE(); // Ensure any pending BLE operations are complete before starting
 
-      await sendCommand("START_BT");
+      await sendCommandPacket(START_BT);
 
       await delay(150); // Short delay to allow Arduino to prepare for incoming packets
       sendDataPacket();
+    }
+
+    async function stopTests() {
+      if (!connected) {
+        alert("Not connected");
+        return;
+      }
+
+      if (motorTestRunning) await sendCommandPacket(STOP_MOTOR);
+      if (bluetoothTestRunning) await sendCommandPacket(STOP_BT);
+
+      motorTestRunning = false;
+      bluetoothTestRunning = false;
+      updateUI();
+      logCommand("Stopped all tests");
+    }
+
+    async function sendCommandPacket(commandId) {
+      if (!connected) {
+        alert("Not connected");
+        return;
+      }
+
+      let inSteps = 0;
+      let reverse = 0;
+      let payload16 = 0;
+
+      const isMotorCmd = (commandId === 0b00 || commandId === 0b01);
+      const isBtCmd = (commandId === 0b10 || commandId === 0b11);
+
+      if (isMotorCmd) {
+        inSteps = motorConfig.inSteps ? 1 : 0;
+        reverse = motorConfig.reverse ? 1 : 0;
+
+        // Motor payload (16 bits total):
+        // upper 8 bits = degrees, lower 8 bits = speed
+        payload16 =
+          ((motorConfig.degrees & 0xff) << 8) |
+          (motorConfig.speed & 0xff);
+
+      } else if (isBtCmd) {
+        inSteps = bluetoothConfig.inSteps ? 1 : 0;
+        reverse = 0; // not used for bluetooth
+
+        // Bluetooth payload (uint16 send interval)
+        payload16 = bluetoothConfig.sendIntervalMs & 0xffff;
+
+      } else {
+        console.error("Invalid command ID:", commandId);
+        return;
+      }
+
+      // Assemble 20‑bit packet
+      const packet =
+        ((commandId & 0b11) << 18) |
+        ((inSteps & 0b1) << 17) |
+        ((reverse & 0b1) << 16) |
+        payload16;
+
+      // Send as 3 bytes (big‑endian)
+      const buffer = new ArrayBuffer(3);
+      const view = new DataView(buffer);
+      view.setUint8(0, (packet >> 16) & 0xff);
+      view.setUint8(1, (packet >> 8) & 0xff);
+      view.setUint8(2, packet & 0xff);
+
+      await cmdChar.writeValue(buffer);
+
+      logCommand(`Sent command ${commandId}`);
     }
 
     async function sendDataPacket() {
@@ -493,21 +666,6 @@
         `thr=${kbps.toFixed(2)}kbps`;
 
       logData(line);
-    }
-
-    async function stopTests() {
-      if (!connected) {
-        alert("Not connected");
-        return;
-      }
-
-      if (motorTestRunning) await sendCommand("STOP_MOTOR");
-      if (bluetoothTestRunning) await sendCommand("STOP_BT");
-
-      motorTestRunning = false;
-      bluetoothTestRunning = false;
-      updateUI();
-      logCommand("Stopped all tests");
     }
 
     function delay(ms) {
