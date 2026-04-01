@@ -90,6 +90,12 @@
       opacity: 1.0;
     }
 
+    button.connecting {
+      background-color: var(--running);
+      color: var(--card);
+      cursor: progress;
+    }
+
     button.connected {
       background-color: var(--good);
       color: var(--card);
@@ -464,8 +470,8 @@
       if (!unlocked) return;
 
       try {
-        document.getElementById("status").textContent = "Connecting..."
-        document.getElementById("status").style.color = "var(--muted)";
+        document.getElementById("connect-btn").textContent = "Connecting..."
+        document.getElementById("connect-btn").classList.add("connecting");
 
         device = await navigator.bluetooth.requestDevice({
           filters: [{
@@ -515,6 +521,8 @@
       dataChar = null;
       metricsChar = null;
       testRunning = false;
+
+      document.getElementById("connect-btn").classList.remove("connecting");
       updateUI();
       logCommand(`Disconnected from ${DEVICE_NAME}`);
     }
