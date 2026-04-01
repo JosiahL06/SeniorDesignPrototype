@@ -281,14 +281,14 @@
         <div class="config-content">
           <label>
             Rotation Angle (degrees):
-            <input type="range" min="5" max="180" value="70"
+            <input type="range" min="5" max="180" step="5" value="75"
               oninput="motorConfig.degrees = Number(this.value); degreesVal.textContent = this.value;">
           </label>
           <div><span id="degreesVal">70</span>°</div>
 
           <label>
             Speed:
-            <input type="range" min="1" max="100" value="20"
+            <input type="range" min="5" max="100" step="5" value="20"
               oninput="motorConfig.speed = Number(this.value); speedVal.textContent = this.value;">
           </label>
           <div><span id="speedVal">20</span>%</div>
@@ -297,6 +297,12 @@
             Rotate in 5 degree steps and wait for user prompt between steps:
             <input type="checkbox" onchange="motorConfig.inSteps = this.checked;">
           </label>
+
+          <label class="checkbox">
+            Reverse motor direction:
+            <input type="checkbox" onchange="motorConfig.reverse = this.checked;">
+          </label>
+
         </div>
       </details>
 
@@ -320,7 +326,7 @@
           </label>
 
           <label class="checkbox">
-            Wait for user prompt between 5 packets:
+            Wait for user prompt between each 5 packets:
             <input type="checkbox" onchange="bluetoothConfig.inSteps = this.checked;">
           </label>
 
@@ -363,8 +369,8 @@
 
     // Motor Test Configurations
     let motorConfig = {
-      degrees: 70, // Degrees to rotate (5-180)
-      speed: 20, // Motor speed percentage (1-100)
+      degrees: 75, // Degrees to rotate (5-180)
+      speed: 20, // Motor speed percentage (5-100)
       inSteps: false, // Whether to do rotation in 5 degree steps and wait for user prompt between steps
       reverse: false // Whether to reverse motor direction
     };
@@ -504,6 +510,8 @@
         console.error(error);
         statusEl.textContent = "Connection failed";
         statusEl.className = "status disconnected";
+        document.getElementById("connect-btn").classList.remove("connecting");
+        updateUI();
         logCommand(`Connection failed`);
       }
     }
