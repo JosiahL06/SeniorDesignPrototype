@@ -1,11 +1,11 @@
 // =============================
 // BLE Testing Code
-// Last Updated: 3/31 by Josiah Laakkonen
+// Last Updated: 4/2 by Josiah Laakkonen
 // TODO:
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
 //  - Add ACK (acknowledgement) characteristic to confirm when other characteristics are received
 //    (This will replace Serial as main debug communication)
-//  - (Optional?) Reformat code to move BLE and motor control into different .cpp and .h files
+//  - Reformat code to move BLE and motor control into different .cpp and .h files
 // =============================
 #include <NimBLEDevice.h>
 
@@ -24,6 +24,12 @@ const int ledcChannelA = 0;
 const int ledcChannelB = 1;
 const int freq = 5000;
 const int resolution = 8;
+
+// =============================
+// Motor Configuration
+// =============================
+const int motorRPM = 95; // 95 for robotshop motors, 60 for amazon motors
+const int msPerRev = 60000 / motorRPM;
 
 // =============================
 // BLE Configuration
@@ -188,7 +194,7 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
             "  Degrees: %u | Speed: %u | InSteps: %d | Reverse: %d\n",
             cmd.degrees, cmd.speed, cmd.inSteps, cmd.reverse);
 
-          int runTimeMs = 1000 * cmd.degrees / 360 * 100 / cmd.speed;
+          int runTimeMs = msPerRev * cmd.degrees / 360 * 100 / cmd.speed;
           int pwm = 255 * cmd.speed / 100;
 
           // Direction control
