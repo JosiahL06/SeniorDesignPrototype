@@ -65,7 +65,7 @@ enum CommandId : uint8_t {
 };
 
 // =============================
-// Command Packet Format to receive data
+// Command Packet Format to receive commands from website
 // =============================
 struct CommandPacket {
   uint8_t commandId;
