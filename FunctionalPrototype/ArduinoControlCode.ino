@@ -1,142 +1,196 @@
 // =============================
-// Prototype Control Code
-// OUTDATED AS OF 3/30
-// https://github.com/JosiahL06/SeniorDesignPrototype/blob/main/FunctionalPrototype/ArduinoControlCode.ino
-// Last Updated: 3/28 by Josiah Laakkonen
+// Arduino Control Code
+// Last Updated: 4/4 by Josiah Laakkonen
 // TODO:
-//        - Update BLE connection to reflect changes per BLETestCode.ino
-//        - Update Motor control to reflect changes per MotorControlCode.ino
+//  - Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
+//  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
+//  - Add ACK (acknowledgement) characteristic to confirm when other characteristics are received
+//    (This will replace Serial as main debug communication)
+//  - Reformat code to move BLE and motor control into different .cpp and .h files
 // =============================
-
-#include <NimBLEDevice.h>
-
-// =============================
-// BLE Configuration
-// =============================
-#define DEVICE_NAME         "NanoESP32-Willow-BLE"
-#define SERVICE_UUID        "55f8a5ee-886f-4929-a3ab-5745cbbceab5"
-#define CHARACTERISTIC_UUID "a6a06cf5-71b2-489b-9f03-84dfe6fc6330"
+#include "MotorPair.h"
+#include "Packets.h"
+#include "BLE.h"
 
 // =============================
-// Arduino Pin Configurations
+// Motor Initialization/Pin Configuration
 // =============================
-// #define ...
+const int ledcChannelA_1 = 0;
+const int ledcChannelB_1 = 1;
+const int ledcChannelA_2 = 2;
+const int ledcChannelB_2 = 3;
+const int freq = 20000;
+const int resolution = 8;
 
-NimBLECharacteristic* pCharacteristic;
-NimBLECharacteristic* pPairingChar;
-bool deviceConnected = false;
+// Motor Pair 1
+const int PWMA_1 = 6;
+const int AIN2_1 = 5;
+const int AIN1_1 = 4;
+const int STBY_1 = 3;
+const int BIN1_1 = 2;
+const int BIN2_1 = 0;
+const int PWMB_1 = 1;
 
-// =============================
-// Server Callbacks
-// =============================
-class ServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer) {
-        deviceConnected = true;
-        Serial.println("BLE client connected");
-    }
+// Motor Pair 2
+const int PWMA_2 = 12;
+const int AIN2_2 = 11;
+const int AIN1_2 = 10;
+const int STBY_2 = 13;
+const int BIN1_2 = 9;
+const int BIN2_2 = 8;
+const int PWMB_2 = 7;
 
-    void onDisconnect(NimBLEServer* pServer) {
-        deviceConnected = false;
-        Serial.println("BLE client disconnected");
+const int countsPerRevolution = 1727 * 2;  // 1727 pulses per revolution * 2 counts per pulse
 
-        // Restart advertising
-        pServer->getAdvertising()->stop();
-        pServer->getAdvertising()->start();
-    }
-};
+volatile long enc1_count = 0;
+volatile long enc2_count = 0;
 
-// =============================
-// Command Callbacks
-// =============================
-class CommandCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic* pCharacteristic) {
-        std::string value = pCharacteristic->getValue();
-        if (value.empty()) return;
+MotorPair motorPair1(
+  PWMA_1, AIN1_1, AIN2_1,
+  PWMB_1, BIN1_1, BIN1_1,
+  STBY_1,
+  ledcChannelA_1, ledcChannelB_1,
+  &enc1_count,
+  countsPerRevolution);
 
-        Serial.print("Received command: ");
-        Serial.println(value.c_str());
-
-        if (value == "ON") {
-            analogWrite(LED_RED, 255);
-            analogWrite(LED_GREEN, 0);
-            analogWrite(LED_BLUE, 255);
-            Serial.println("Pin ON");
-        }
-        else if (value == "OFF") {
-            analogWrite(LED_RED, 0);
-            analogWrite(LED_GREEN, 255);
-            analogWrite(LED_BLUE, 255);
-            Serial.println("Pin OFF");
-        }
-        else if (value == "TOGGLE") {
-            digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-            Serial.println("Pin TOGGLED");
-        }
-        else {
-            Serial.println("Unknown command");
-        }
-    }
-};
+MotorPair motorPair2(
+  PWMA_2, AIN1_2, AIN2_2,
+  PWMB_2, BIN1_2, BIN2_2,
+  STBY_2,
+  ledcChannelA_2, ledcChannelB_2,
+  &enc2_count,
+  countsPerRevolution);
 
 // =============================
-// Setup
+// Encoder Configuration
 // =============================
-void setup() {
-    Serial.begin(115200);
-    delay(1000);
+const int ENCA_1 = 17;
+const int ENCB_1 = 18;
+const int ENCA_2 = 19;
+const int ENCB_2 = 20;
 
-    Serial.println("Starting NimBLE device...");
-
-    // Initialize NimBLE
-    NimBLEDevice::init(DEVICE_NAME);
-
-    // Enable security encryption
-    NimBLEDevice::setSecurityAuth(
-      true,   // bonding
-      false,  // MITM (must be false for Web Bluetooth)
-      true    // LE Secure Connections
-    );
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
-
-    // Optional power tuning
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-
-    // Create server
-    NimBLEServer* pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new ServerCallbacks());
-
-    // Create service
-    NimBLEService* pService = pServer->createService(SERVICE_UUID);
-
-    // Create characteristic
-    pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID,
-      NIMBLE_PROPERTY::WRITE |
-      NIMBLE_PROPERTY::NOTIFY
-    );
-
-    pCharacteristic->setCallbacks(new CommandCallbacks());
-
-    pCharacteristic->setValue("Willow says meow (hi)");
-
-    // Start the service
-    pService->start();
-
-    // Advertising
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setName(DEVICE_NAME);
-    pAdvertising->setAppearance(0x0000);
-    pAdvertising->enableScanResponse(true);
-    pAdvertising->start();
-
-
-    analogWrite(LED_RED, 255);
-    analogWrite(LED_GREEN, 255);
-    analogWrite(LED_BLUE, 0);
-    Serial.println("Willow is advertising");
+void IRAM_ATTR isrEncA_1() {
+  bool b = digitalRead(ENCB_1);
+  enc1_count += b ? +1 : -1;
 }
 
+void IRAM_ATTR isrEncB_1() {
+  bool a = digitalRead(ENCA_1);
+  enc1_count += a ? -1 : +1;
+}
+
+void IRAM_ATTR isrEncA_2() {
+  bool b = digitalRead(ENCB_2);
+  enc2_count += b ? +1 : -1;
+}
+
+void IRAM_ATTR isrEncB_2() {
+  bool a = digitalRead(ENCA_2);
+  enc2_count += a ? -1 : +1;
+}
+
+// =============================
+// Motor Configuration
+// =============================
+const int motorRPM = 95;  // 95 for robotshop motors, 60 for amazon motors
+const int msPerRev = 60000 / motorRPM;
+
+// =============================
+// Metrics State
+// =============================
+uint16_t metricsIntervalMs = 0;
+
+uint32_t rxExpectedSeq = 0;
+uint32_t packetsRx = 0;
+uint32_t packetsLost = 0;
+
+uint64_t latencySumUs = 0;
+uint32_t latencySamples = 0;
+
+uint32_t lastRxTimeUs = 0;
+uint64_t jitterSumUs = 0;
+
+uint32_t bytesRx = 0;
+uint32_t statsStartMs = 0;
+
+// =============================
+// Setup - Initialize BLE Connection
+// =============================
+void setup() {
+  // Configuring motor pins
+  for (int i = 0; i <= 13; i++) { pinMode(i, OUTPUT); }
+
+  pinMode(ENCA_1, INPUT_PULLUP);
+  pinMode(ENCB_1, INPUT_PULLUP);
+  pinMode(ENCA_2, INPUT_PULLUP);
+  pinMode(ENCB_2, INPUT_PULLUP);
+
+  attachInterrupt(
+    digitalPinToInterrupt(ENCA_1),
+    isrEncA_1,
+    RISING);
+  attachInterrupt(
+    digitalPinToInterrupt(ENCB_1),
+    isrEncB_1,
+    RISING);
+  attachInterrupt(
+    digitalPinToInterrupt(ENCA_2),
+    isrEncA_2,
+    RISING);
+  attachInterrupt(
+    digitalPinToInterrupt(ENCB_2),
+    isrEncB_2,
+    RISING);
+
+  ledcSetup(ledcChannelA_1, freq, resolution);
+  ledcSetup(ledcChannelB_1, freq, resolution);
+  ledcSetup(ledcChannelA_2, freq, resolution);
+  ledcSetup(ledcChannelB_2, freq, resolution);
+  ledcAttachPin(PWMA_1, ledcChannelA_1);
+  ledcAttachPin(PWMB_1, ledcChannelB_1);
+  ledcAttachPin(PWMA_2, ledcChannelA_2);
+  ledcAttachPin(PWMB_2, ledcChannelB_2);
+
+  BLE_init();
+}
+
+// =============================
+// Loop - Update motor instructions, calculate metrics and send packets
+// =============================
 void loop() {
-    // No loop logic required
+  BLE_update();
+
+  motorPair1.update();
+  motorPair2.update();
+
+  if (BLE_hasNewCommand()) {
+    CommandPacket cmd = BLE_getCommand();
+
+    switch (cmd.commandId) {
+      case START_BT:
+        metricsIntervalMs = cmd.interval;
+        break;
+
+      case STOP_BT:
+        metricsIntervalMs = 0;
+        break;
+
+      case START_MOTOR:
+        motorPair1.start(cmd.degrees, cmd.speed, cmd.reverse);
+        motorPair2.start(cmd.degrees, cmd.speed, !cmd.reverse);
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  static uint32_t lastMetricsMs = 0;
+  if (BLE_isConnected() && BLE_isBtTestRunning() && metricsIntervalMs > 0 && millis() - lastMetricsMs >= metricsIntervalMs) {
+
+    MetricsPacket metrics{};
+    metrics.timestampMs = millis();
+    BLE_notifyMetrics(metrics);
+    lastMetricsMs = millis();
+  }
 }
