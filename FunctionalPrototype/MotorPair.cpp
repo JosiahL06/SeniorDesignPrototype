@@ -24,6 +24,12 @@ void MotorPair::begin() {
     pinMode(_bin2, OUTPUT);
     pinMode(_stby, OUTPUT);
     digitalWrite(_stby, LOW);
+
+    ledcSetup(_ledcA, 20000, 8);
+    ledcSetup(_ledcB, 20000, 8);
+
+    ledcAttachPin(_pwma, _ledcA);
+    ledcAttachPin(_pwmb, _ledcB);
 }
 
 void MotorPair::start(uint16_t degrees, uint8_t speedPercent, bool reverse) {
