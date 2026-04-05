@@ -45,6 +45,20 @@ struct __attribute__((packed)) MetricsPacket {
 };
 
 // =============================
+// ACK Packet
+// =============================
+enum AckStatus : uint8_t {
+    ACK_SUCCESS = 0x00,
+    ACK_ERROR   = 0x01
+};
+
+struct __attribute__((packed)) AckPacket {
+    CommandId commandId;     // Which command is being acknowledged
+    AckStatus status;        // Success or error status
+    uint32_t timestampMs;    // Timestamp when ACK was generated
+};
+
+// =============================
 // Packet utilities
 // =============================
 CommandPacket unpackCommand(const std::string& value);

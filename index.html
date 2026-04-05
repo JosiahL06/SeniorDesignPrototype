@@ -352,7 +352,12 @@
     const CMD_CHAR_UUID = "30bce33a-6e60-4306-ad36-8718f82ee801";
     const DATA_CHAR_UUID = "fef211ef-bc20-4f2f-9e9d-3cb6c7b6f772";
     const METRICS_CHAR_UUID = "555ff5a9-d76d-4945-b7a2-f26612fc5be5";
+    const ACK_CHAR_UUID = "a2a1c8b3-4d7e-4f2a-9b1c-8e7d5f3a2b1c";
     const ACCESS_PASSWORD = "Pocki06";
+
+    // ACK Status Codes
+    const ACK_SUCCESS = 0x00;
+    const ACK_ERROR = 0x01;
 
     // State Variables
     let unlocked = false;
@@ -365,6 +370,7 @@
     let cmdChar = null;
     let dataChar = null;
     let metricsChar = null;
+    let ackChar = null;
     let connected = false;
 
     // Motor Test Configurations
@@ -493,18 +499,27 @@
         cmdChar = await service.getCharacteristic(CMD_CHAR_UUID);
         dataChar = await service.getCharacteristic(DATA_CHAR_UUID);
         metricsChar = await service.getCharacteristic(METRICS_CHAR_UUID);
+        ackChar = await service.getCharacteristic(ACK_CHAR_UUID);
 
         connected = true;
         updateUI();
         logCommand(`Connected to ${DEVICE_NAME}`);
 
-        // Enable notifications (bluetooth metrics come back this way)
+        // Enable notifications (metrics come back this way)
         await metricsChar.startNotifications();
         metricsChar.addEventListener(
           "characteristicvaluechanged",
           handleMetricsNotification
         );
-        logCommand("BLE Notifications enabled");
+        logCommand("Metrics notifications enabled");
+
+        // Enable ACK notifications
+        await ackChar.startNotifications();
+        ackChar.addEventListener(
+          "characteristicvaluechanged",
+          handleAckNotification
+        );
+        logCommand("ACK notifications enabled");
       }
       catch (error) {
         console.error(error);
@@ -528,6 +543,7 @@
       cmdChar = null;
       dataChar = null;
       metricsChar = null;
+      ackChar = null;
       testRunning = false;
 
       document.getElementById("connect-btn").classList.remove("connecting");
@@ -704,6 +720,37 @@
         `thr=${kbps.toFixed(2)}kbps`;
 
       logData(line);
+    }
+
+    function handleAckNotification(event) {
+      const data = event.target.value;
+      if (data.byteLength !== 6) return; // safety check for expected ACK packet size
+
+      const view = new DataView(data.buffer);
+
+      const commandId = view.getUint8(0);
+      const status = view.getUint8(1);
+      const timestampMs = view.getUint32(2, true);
+
+      const statusStr = status === ACK_SUCCESS ? "SUCCESS" : "ERROR";
+      const commandStr = getCommandName(commandId);
+
+      logCommand(`ACK: ${commandStr} [${statusStr}] at ${timestampMs}ms`);
+    }
+
+    function getCommandName(commandId) {
+      switch (commandId) {
+        case STOP_MOTOR:
+          return "STOP_MOTOR";
+        case START_MOTOR:
+          return "START_MOTOR";
+        case STOP_BT:
+          return "STOP_BT";
+        case START_BT:
+          return "START_BT";
+        default:
+          return `UNKNOWN(${commandId})`;
+      }
     }
 
     function delay(ms) {

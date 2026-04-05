@@ -23,3 +23,6 @@ CommandPacket BLE_getCommand();
 
 // Metrics notification
 void BLE_notifyMetrics(const MetricsPacket& metrics);
+
+// ACK notification
+void BLE_notifyAck(const AckPacket& ack);

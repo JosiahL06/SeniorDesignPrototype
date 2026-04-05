@@ -8,6 +8,7 @@
 #define CMD_CHAR_UUID      "30bce33a-6e60-4306-ad36-8718f82ee801"
 #define DATA_CHAR_UUID     "fef211ef-bc20-4f2f-9e9d-3cb6c7b6f772"
 #define METRICS_CHAR_UUID  "555ff5a9-d76d-4945-b7a2-f26612fc5be5"
+#define ACK_CHAR_UUID      "a2a1c8b3-4d7e-4f2a-9b1c-8e7d5f3a2b1c"
 
 // =============================
 // BLE State
@@ -15,6 +16,7 @@
 static NimBLECharacteristic* cmdChar;
 static NimBLECharacteristic* dataChar;
 static NimBLECharacteristic* metricsChar;
+static NimBLECharacteristic* ackChar;
 
 static bool deviceConnected = false;
 static bool bluetoothTestRunning = false;
@@ -67,6 +69,13 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
             bluetoothTestRunning = true;
         else if (latestCmd.commandId == STOP_BT)
             bluetoothTestRunning = false;
+
+        // Send ACK notification
+        AckPacket ack{};
+        ack.commandId = latestCmd.commandId;
+        ack.status = ACK_SUCCESS;
+        ack.timestampMs = millis();
+        BLE_notifyAck(ack);
     }
 };
 
@@ -122,6 +131,11 @@ void BLE_init() {
         NIMBLE_PROPERTY::NOTIFY
     );
 
+    ackChar = service->createCharacteristic(
+        ACK_CHAR_UUID,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
     service->start();
 
     NimBLEAdvertising* adv =
@@ -162,4 +176,14 @@ void BLE_notifyMetrics(const MetricsPacket& metrics) {
         sizeof(MetricsPacket)
     );
     metricsChar->notify();
+}
+
+void BLE_notifyAck(const AckPacket& ack) {
+    if (!deviceConnected) return;
+
+    ackChar->setValue(
+        (uint8_t*)&ack,
+        sizeof(AckPacket)
+    );
+    ackChar->notify();
 }

@@ -4,8 +4,6 @@
 // TODO:
 //  - Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
-//  - Add ACK (acknowledgement) characteristic to confirm when other characteristics are received
-//    (This will replace Serial as main debug communication)
 //  - Reformat code to move BLE and motor control into different .cpp and .h files
 // =============================
 #include "MotorPair.h"
