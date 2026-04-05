@@ -117,9 +117,11 @@ uint32_t statsStartMs = 0;
 // Setup - Initialize BLE Connection
 // =============================
 void setup() {
-  // Configuring motor pins
-  for (int i = 0; i <= 13; i++) { pinMode(i, OUTPUT); }
-
+  // Configuring motors
+  motorPair1.begin();
+  motorPair2.begin();
+  
+  // Configuring encoder pins
   pinMode(ENCA_1, INPUT_PULLUP);
   pinMode(ENCB_1, INPUT_PULLUP);
   pinMode(ENCA_2, INPUT_PULLUP);
@@ -142,15 +144,7 @@ void setup() {
     isrEncB_2,
     RISING);
 
-  ledcSetup(ledcChannelA_1, freq, resolution);
-  ledcSetup(ledcChannelB_1, freq, resolution);
-  ledcSetup(ledcChannelA_2, freq, resolution);
-  ledcSetup(ledcChannelB_2, freq, resolution);
-  ledcAttachPin(PWMA_1, ledcChannelA_1);
-  ledcAttachPin(PWMB_1, ledcChannelB_1);
-  ledcAttachPin(PWMA_2, ledcChannelA_2);
-  ledcAttachPin(PWMB_2, ledcChannelB_2);
-
+  // Initialize BLE connection
   BLE_init();
 }
 
