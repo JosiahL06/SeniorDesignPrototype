@@ -1,5 +1,5 @@
 // =============================
-// Arduino Control Code
+// Functional Prototype Arduino Control Code
 // Last Updated: 4/4 by Josiah Laakkonen
 // TODO:
 //  - Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
