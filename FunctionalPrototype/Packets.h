@@ -37,11 +37,30 @@ struct __attribute__((packed)) DataPacket {
 // Metrics Packet
 // =============================
 struct __attribute__((packed)) MetricsPacket {
-    uint32_t timestampMs;
-    uint16_t per_x10000;
-    uint32_t avgLatencyUs;
-    uint32_t avgJitterUs;
-    uint32_t throughputKbps_x100;
+  // When this metrics snapshot was generated
+  // (milliseconds)
+  uint32_t timestampMs;
+
+  // Total notifications sent since START_BT
+  uint32_t txCount;
+
+  // Total bytes sent as BLE notifications since START_BT
+  uint32_t txBytes;
+
+  // Mean actual interval between notifications
+  // (microseconds, application-layer measured)
+  uint32_t intervalMeanUs;
+
+  // RMS jitter of the notification interval
+  // (microseconds, application-layer measured)
+  uint32_t intervalJitterUs;
+
+  // Number of times the task missed its expected interval badly
+  // (indicates scheduler / BLE backpressure issues)
+  uint32_t sendOverruns;
+
+  // Elapsed time since START_BT
+  uint32_t uptimeMs;
 };
 
 // =============================

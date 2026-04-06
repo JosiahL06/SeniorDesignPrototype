@@ -38,26 +38,26 @@ const int BIN1_2 = 9;
 const int BIN2_2 = 8;
 const int PWMB_2 = 7;
 
-const int countsPerRevolution = 1727 * 2;  // 1727 pulses per revolution * 2 counts per pulse
+const int countsPerRevolution = 1727 * 2; // 1727 pulses per revolution * 2 counts per pulse
 
 volatile long enc1_count = 0;
 volatile long enc2_count = 0;
 
 MotorPair motorPair1(
-  PWMA_1, AIN1_1, AIN2_1,
-  PWMB_1, BIN1_1, BIN2_1,
-  STBY_1,
-  ledcChannelA_1, ledcChannelB_1,
-  &enc1_count,
-  countsPerRevolution);
+    PWMA_1, AIN1_1, AIN2_1,
+    PWMB_1, BIN1_1, BIN2_1,
+    STBY_1,
+    ledcChannelA_1, ledcChannelB_1,
+    &enc1_count,
+    countsPerRevolution);
 
 MotorPair motorPair2(
-  PWMA_2, AIN1_2, AIN2_2,
-  PWMB_2, BIN1_2, BIN2_2,
-  STBY_2,
-  ledcChannelA_2, ledcChannelB_2,
-  &enc2_count,
-  countsPerRevolution);
+    PWMA_2, AIN1_2, AIN2_2,
+    PWMB_2, BIN1_2, BIN2_2,
+    STBY_2,
+    ledcChannelA_2, ledcChannelB_2,
+    &enc2_count,
+    countsPerRevolution);
 
 // =============================
 // Encoder Configuration
@@ -67,22 +67,26 @@ const int ENCB_1 = 18;
 const int ENCA_2 = 19;
 const int ENCB_2 = 20;
 
-void IRAM_ATTR isrEncA_1() {
+void IRAM_ATTR isrEncA_1()
+{
   bool b = digitalRead(ENCB_1);
   enc1_count += b ? +1 : -1;
 }
 
-void IRAM_ATTR isrEncB_1() {
+void IRAM_ATTR isrEncB_1()
+{
   bool a = digitalRead(ENCA_1);
   enc1_count += a ? -1 : +1;
 }
 
-void IRAM_ATTR isrEncA_2() {
+void IRAM_ATTR isrEncA_2()
+{
   bool b = digitalRead(ENCB_2);
   enc2_count += b ? +1 : -1;
 }
 
-void IRAM_ATTR isrEncB_2() {
+void IRAM_ATTR isrEncB_2()
+{
   bool a = digitalRead(ENCA_2);
   enc2_count += a ? -1 : +1;
 }
@@ -90,35 +94,35 @@ void IRAM_ATTR isrEncB_2() {
 // =============================
 // Motor Configuration
 // =============================
-const int motorRPM = 95;  // 95 for robotshop motors, 60 for amazon motors
+const int motorRPM = 95; // 95 for robotshop motors, 60 for amazon motors
 const int msPerRev = 60000 / motorRPM;
 
 // =============================
-// Metrics State
+// BLE Metrics
 // =============================
-uint16_t metricsIntervalMs = 0;
+uint32_t metricsIntervalMs = 0;
 
-uint32_t rxExpectedSeq = 0;
-uint32_t packetsRx = 0;
-uint32_t packetsLost = 0;
+uint32_t txCount = 0;
+uint32_t txBytes = 0;
 
-uint64_t latencySumUs = 0;
-uint32_t latencySamples = 0;
+uint64_t intervalSumUs = 0;
+uint64_t intervalSqSumUs = 0;
 
-uint32_t lastRxTimeUs = 0;
-uint64_t jitterSumUs = 0;
+uint32_t intervalSamples = 0;
+uint32_t sendOverruns = 0;
 
-uint32_t bytesRx = 0;
-uint32_t statsStartMs = 0;
+uint64_t lastSendTimeUs = 0;
+uint32_t testStartMs = 0;
 
 // =============================
 // Setup - Initialize BLE Connection
 // =============================
-void setup() {
+void setup()
+{
   // Configuring motors
   motorPair1.begin();
   motorPair2.begin();
-  
+
   // Configuring encoder pins
   pinMode(ENCA_1, INPUT_PULLUP);
   pinMode(ENCB_1, INPUT_PULLUP);
@@ -126,21 +130,21 @@ void setup() {
   pinMode(ENCB_2, INPUT_PULLUP);
 
   attachInterrupt(
-    digitalPinToInterrupt(ENCA_1),
-    isrEncA_1,
-    RISING);
+      digitalPinToInterrupt(ENCA_1),
+      isrEncA_1,
+      RISING);
   attachInterrupt(
-    digitalPinToInterrupt(ENCB_1),
-    isrEncB_1,
-    RISING);
+      digitalPinToInterrupt(ENCB_1),
+      isrEncB_1,
+      RISING);
   attachInterrupt(
-    digitalPinToInterrupt(ENCA_2),
-    isrEncA_2,
-    RISING);
+      digitalPinToInterrupt(ENCA_2),
+      isrEncA_2,
+      RISING);
   attachInterrupt(
-    digitalPinToInterrupt(ENCB_2),
-    isrEncB_2,
-    RISING);
+      digitalPinToInterrupt(ENCB_2),
+      isrEncB_2,
+      RISING);
 
   // Initialize BLE connection
   BLE_init();
@@ -149,45 +153,100 @@ void setup() {
 // =============================
 // Loop - Update motor instructions, calculate metrics and send packets
 // =============================
-void loop() {
+void loop()
+{
   BLE_update();
 
   motorPair1.update();
   motorPair2.update();
 
-  if (BLE_hasNewCommand()) {
+  if (BLE_hasNewCommand())
+  {
     CommandPacket cmd = BLE_getCommand();
 
-    switch (cmd.commandId) {
-      case START_BT:
-        metricsIntervalMs = cmd.interval;
-        break;
+    switch (cmd.commandId)
+    {
+    case START_BT:
+      metricsIntervalMs = cmd.interval;
 
-      case STOP_BT:
-        metricsIntervalMs = 0;
-        break;
+      txCount = 0;
+      txBytes = 0;
+      intervalSumUs = 0;
+      intervalSqSumUs = 0;
+      intervalSamples = 0;
+      sendOverruns = 0;
+      lastSendTimeUs = 0;
+      testStartMs = millis();
+      break;
 
-      case START_MOTOR:
-        motorPair1.start(cmd.degrees, cmd.speed, cmd.reverse);
-        motorPair2.start(cmd.degrees, cmd.speed, !cmd.reverse);
-        break;
-      
-      case STOP_MOTOR:
-        motorPair1.stop();
-        motorPair2.stop();
-        break;
+    case STOP_BT:
+      metricsIntervalMs = 0;
 
-      default:
-        break;
+      if (intervalSamples > 0)
+      {
+        double meanUs =
+            (double)intervalSumUs / intervalSamples;
+
+        double variance =
+            ((double)intervalSqSumUs / intervalSamples) -
+            (meanUs * meanUs);
+
+        double jitterUs =
+            variance > 0 ? sqrt(variance) : 0;
+
+        // Store in final metrics packet or log
+      }
+      break;
+
+    case START_MOTOR:
+      motorPair1.start(cmd.degrees, cmd.speed, cmd.reverse);
+      motorPair2.start(cmd.degrees, cmd.speed, !cmd.reverse);
+      break;
+
+    case STOP_MOTOR:
+      motorPair1.stop();
+      motorPair2.stop();
+      break;
+
+    default:
+      break;
     }
   }
 
   static uint32_t lastMetricsMs = 0;
-  if (BLE_isConnected() && BLE_isBtTestRunning() && metricsIntervalMs > 0 && millis() - lastMetricsMs >= metricsIntervalMs) {
+  if (
+      BLE_isConnected() &&
+      BLE_isBtTestRunning() &&
+      metricsIntervalMs > 0 &&
+      millis() - lastMetricsMs >= metricsIntervalMs)
+  {
+    uint64_t nowUs = micros();
+
+    if (lastSendTimeUs != 0)
+    {
+      uint64_t deltaUs = nowUs - lastSendTimeUs;
+      intervalSumUs += deltaUs;
+      intervalSqSumUs += deltaUs * deltaUs;
+      intervalSamples++;
+
+      if (deltaUs > (uint64_t)metricsIntervalMs * 1000ULL * 2)
+      {
+        sendOverruns++;
+      }
+    }
+
+    lastSendTimeUs = nowUs;
 
     MetricsPacket metrics{};
     metrics.timestampMs = millis();
+    metrics.txCount = txCount;
+    metrics.txBytes = txBytes;
+
     BLE_notifyMetrics(metrics);
+
+    txCount++;
+    txBytes += sizeof(MetricsPacket);
+
     lastMetricsMs = millis();
   }
 }
