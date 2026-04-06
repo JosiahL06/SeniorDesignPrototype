@@ -45,7 +45,7 @@ volatile long enc2_count = 0;
 
 MotorPair motorPair1(
   PWMA_1, AIN1_1, AIN2_1,
-  PWMB_1, BIN1_1, BIN1_1,
+  PWMB_1, BIN1_1, BIN2_1,
   STBY_1,
   ledcChannelA_1, ledcChannelB_1,
   &enc1_count,
