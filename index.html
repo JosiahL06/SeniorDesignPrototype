@@ -390,6 +390,14 @@
     let packetSeq = 0; // Sequence number for bluetooth test packets
     let minIntervalMs = 10; // Minimum interval between packets
 
+    // Metrics Computation State
+    let lastMetricsArrivalUs = null;
+    let intervalDeltasUs = [];
+    let lastTxBytes = null;
+    let lastUptimeMs = null;
+    let rttSamplesUs = [];
+    let lastSentDataTimestampUs = null;
+
     // Command IDs
     const STOP_MOTOR = 0b00;
     const START_MOTOR = 0b01;
@@ -679,14 +687,13 @@
     async function sendDataPacket() {
       if (!bluetoothTestRunning) return;
 
-      // Packet layout must match Arduino's expected format
-      // uint32 seq | uint32 timestamp_us | padding
-
       const buffer = new ArrayBuffer(16);
       const view = new DataView(buffer);
 
+      lastSentDataTimestampUs = performance.now() * 1000;
+
       view.setUint32(0, packetSeq++, true);
-      view.setUint32(4, performance.now() * 1000, true);
+      view.setUint32(4, lastSentDataTimestampUs, true);
       view.setUint32(8, 0xAAAAAAAA, true);
       view.setUint32(12, 0xBBBBBBBB, true);
 
@@ -697,29 +704,85 @@
       }
 
       logCommand(`Sent Data packet #${packetSeq - 1}`);
-      setTimeout(sendDataPacket, sendIntervalMs);
+      setTimeout(sendDataPacket, bluetoothConfig.sendIntervalMs);
     }
 
     function handleMetricsNotification(event) {
-      const data = event.target.value;
-      if (data.byteLength !== 18) return; // safety check for expected packet size
+      const nowUs = performance.now() * 1000;
+      const dv = event.target.value;
+      if (dv.byteLength !== 28) return;
 
-      const view = new DataView(data.buffer);
+      const view = new DataView(dv.buffer);
 
-      const timestamp = view.getUint32(0, true);
-      const per = view.getUint16(4, true) / 10000.0;
-      const latencyUs = view.getUint32(6, true);
-      const jitterUs = view.getUint32(10, true);
-      const kbps = view.getUint32(14, true) / 100.0;
+      const pkt = {
+        timestampMs: view.getUint32(0, true),
+        txCount: view.getUint32(4, true),
+        txBytes: view.getUint32(8, true),
+        intervalMeanUs: view.getUint32(12, true),
+        intervalJitterUs: view.getUint32(16, true),
+        sendOverruns: view.getUint32(20, true),
+        uptimeMs: view.getUint32(24, true)
+      };
 
-      const line =
-        `t=${timestamp}ms ` +
-        `PER=${per.toFixed(4)} ` +
-        `lat=${latencyUs}us ` +
-        `jit=${jitterUs}us ` +
-        `thr=${kbps.toFixed(2)}kbps`;
+      // Inter-arrival Jitter (Client-side)
+      if (lastMetricsArrivalUs !== null) {
+        const deltaUs = nowUs - lastMetricsArrivalUs;
+        intervalDeltasUs.push(deltaUs);
+        if (intervalDeltasUs.length > 100) intervalDeltasUs.shift();
+      }
+      lastMetricsArrivalUs = nowUs;
 
-      logData(line);
+      let arrivalJitterUs = 0;
+      if (intervalDeltasUs.length > 1) {
+        const mean =
+          intervalDeltasUs.reduce((a, b) => a + b, 0) /
+          intervalDeltasUs.length;
+
+        const variance =
+          intervalDeltasUs.reduce(
+            (s, d) => s + (d - mean) ** 2,
+            0
+          ) / intervalDeltasUs.length;
+
+        arrivalJitterUs = Math.sqrt(variance);
+      }
+
+      // Throughput
+      let throughputKbps = 0;
+      if (lastTxBytes !== null && lastUptimeMs !== null) {
+        const bytesDelta = pkt.txBytes - lastTxBytes;
+        const timeDeltaSec = (pkt.uptimeMs - lastUptimeMs) / 1000;
+        if (timeDeltaSec > 0) {
+          throughputKbps =
+            (bytesDelta * 8) / timeDeltaSec / 1000;
+        }
+      }
+      lastTxBytes = pkt.txBytes;
+      lastUptimeMs = pkt.uptimeMs;
+
+      // RTT Latency (Data timestamp echo)
+      const lastDataTimestampUs = lastSentDataTimestampUs;
+      let rttUs = 0;
+      if (lastDataTimestampUs) {
+        rttUs = nowUs - lastDataTimestampUs;
+        rttSamplesUs.push(rttUs);
+        if (rttSamplesUs.length > 50) rttSamplesUs.shift();
+      }
+
+      let avgRttUs = 0;
+      if (rttSamplesUs.length) {
+        avgRttUs =
+          rttSamplesUs.reduce((a, b) => a + b, 0) /
+          rttSamplesUs.length;
+      }
+
+      logData(
+        `Metrics @ ${pkt.timestampMs}ms: ` +
+        `RTT=${Math.round(avgRttUs)}us, ` +
+        `Jitter=${Math.round(arrivalJitterUs)}us, ` +
+        `Throughput=${throughputKbps.toFixed(2)}kbps, ` +
+        `Overruns=${pkt.sendOverruns}`
+      );
     }
 
     function handleAckNotification(event) {

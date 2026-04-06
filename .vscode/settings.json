@@ -1,5 +1,0 @@
-{
-    "arduino.enableUSBDetection": true,
-    "arduino.useArduinoCli": true,
-    "C_Cpp.errorSquiggles": "disabled"
-}

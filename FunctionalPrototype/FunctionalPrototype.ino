@@ -1,10 +1,9 @@
 // =============================
 // Functional Prototype Arduino Control Code
-// Last Updated: 4/4 by Josiah Laakkonen
+// Last Updated: 4/6 by Josiah Laakkonen
 // TODO:
 //  - Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
-//  - Reformat code to move BLE and motor control into different .cpp and .h files
 // =============================
 #include "MotorPair.h"
 #include "Packets.h"

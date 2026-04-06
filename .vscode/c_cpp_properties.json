@@ -3,7 +3,7 @@
     "configurations": [
         {
             "name": "Arduino",
-            "compilerPath": "C:\\Users\\Brayden\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\bin\\xtensa-esp32s3-elf-g++",
+            "compilerPath": "C:\\Users\\Josia\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\bin\\xtensa-esp32s3-elf-g++",
             "compilerArgs": [
                 "-iprefix",
                 "-iwithprefixbefore",
@@ -223,20 +223,20 @@
             ],
             "intelliSenseMode": "gcc-x64",
             "includePath": [
-                "C:\\Users\\Brayden\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\tools\\sdk\\esp32s3\\qio_opi\\include",
-                "C:\\Users\\Brayden\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\cores\\esp32",
-                "C:\\Users\\Brayden\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\variants\\arduino_nano_nora",
-                "C:\\Users\\Brayden\\Documents\\Arduino\\libraries\\NimBLE-Arduino\\src",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include\\c++\\8.4.0",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include\\c++\\8.4.0\\xtensa-esp32s3-elf",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include\\c++\\8.4.0\\backward",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\lib\\gcc\\xtensa-esp32s3-elf\\8.4.0\\include",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\lib\\gcc\\xtensa-esp32s3-elf\\8.4.0\\include-fixed",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\sys-include",
-                "c:\\users\\brayden\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include"
+                "C:\\Users\\Josia\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\tools\\sdk\\esp32s3\\qio_opi\\include",
+                "C:\\Users\\Josia\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\cores\\esp32",
+                "C:\\Users\\Josia\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\variants\\arduino_nano_nora",
+                "C:\\Users\\Josia\\OneDrive\\Documents\\Arduino\\libraries\\NimBLE-Arduino\\src",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include\\c++\\8.4.0",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include\\c++\\8.4.0\\xtensa-esp32s3-elf",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include\\c++\\8.4.0\\backward",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\lib\\gcc\\xtensa-esp32s3-elf\\8.4.0\\include",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\lib\\gcc\\xtensa-esp32s3-elf\\8.4.0\\include-fixed",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\sys-include",
+                "c:\\users\\josia\\appdata\\local\\arduino15\\packages\\esp32\\tools\\s3-gcc\\2021r2-p5\\xtensa-esp32s3-elf\\include"
             ],
             "forcedInclude": [
-                "C:\\Users\\Brayden\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\cores\\esp32\\Arduino.h"
+                "C:\\Users\\Josia\\AppData\\Local\\Arduino15\\packages\\arduino\\hardware\\esp32\\2.0.18-arduino.5\\cores\\esp32\\Arduino.h"
             ],
             "cStandard": "c11",
             "cppStandard": "c++11",
