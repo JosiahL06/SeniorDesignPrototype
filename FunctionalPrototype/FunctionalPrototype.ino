@@ -171,6 +171,11 @@ void loop() {
         motorPair1.start(cmd.degrees, cmd.speed, cmd.reverse);
         motorPair2.start(cmd.degrees, cmd.speed, !cmd.reverse);
         break;
+      
+      case STOP_MOTOR:
+        motorPair1.stop();
+        motorPair2.stop();
+        break;
 
       default:
         break;
