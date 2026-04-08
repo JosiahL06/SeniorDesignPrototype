@@ -1,9 +1,19 @@
 // =============================
 // Functional Prototype Arduino Control Code
-// Last Updated: 4/6 by Josiah Laakkonen
+// Last Updated: 4/8 by Josiah Laakkonen
 // TODO:
-//  - Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
+//  - (optional?) Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
 //  - Redesign how metrics are measured/calculated (99% chance they are irrelevant/garbage data atm)
+
+/* New BLE metrics flow will be:
+  - Website sends START_BT command and initial #0 metrics packet with a payload of binary 0's
+  - Arduino receives start command and initial packet, sends ACK notice, and echoes back with a metric packet with all 0's switched to 1's
+  - Website receives metrics echoed packet, compares send time of initial packet and echoed packet to calculate round trip time (RTT),
+    and calculates packet error rate (PER) by comparing 0's in sent packet to 1's in received packet - any incorrect bits will constitute an erroneous packet
+  - Website measures throughput as packet size / RTT
+  - Website continues test by sending next packets (#1, #2, ...) with defined interval between packets, repeating the steps above when packet is received
+  - Website can increase payload size and reduce interval between packets, possibly stress-testing throughput to failure?
+*/
 // =============================
 #include "MotorPair.h"
 #include "Packets.h"
