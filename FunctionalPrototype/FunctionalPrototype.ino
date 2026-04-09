@@ -7,7 +7,7 @@
 
 /* New BLE metrics flow will be:
   - Website sends START_BT command and initial #0 metrics packet with a payload of binary 0's
-  - Arduino receives start command and initial packet, sends ACK notice, and echoes back with a metric packet with all 0's switched to 1's
+  - Arduino receives start command and initial packet, and echoes back with a metric packet with all 0's switched to 1's
   - Website receives metrics echoed packet, compares send time of initial packet and echoed packet to calculate round trip time (RTT),
     and calculates packet error rate (PER) by comparing 0's in sent packet to 1's in received packet - any incorrect bits will constitute an erroneous packet
   - Website measures throughput as packet size / RTT
