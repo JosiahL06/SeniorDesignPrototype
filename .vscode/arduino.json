@@ -4,5 +4,5 @@
     "programmer": "esptool",
     "sketch": "FunctionalPrototype/FunctionalPrototype.ino",
     "port": "COM4",
-    "output": "build"
+    "output": "./build"
 }
