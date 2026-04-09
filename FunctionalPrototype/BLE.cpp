@@ -1,4 +1,5 @@
 #include "BLE.h"
+#include <cstring>
 
 // =============================
 // BLE UUID Definitions
@@ -89,8 +90,18 @@ class DataCallbacks : public NimBLECharacteristicCallbacks {
         NimBLECharacteristic* d,
         NimBLEConnInfo&
     ) override {
-        // intentionally left minimal
-        (void)d;
+        const std::string& value = d->getValue();
+        if (value.length() != sizeof(DataPacket)) return;
+
+        if (!deviceConnected || !bluetoothTestRunning) return;
+
+        // Echo immediately so packet matching stays accurate
+        // even at higher write rates.
+        d->setValue(
+            (uint8_t*)value.data(),
+            sizeof(DataPacket)
+        );
+        d->notify();
     }
 };
 
@@ -122,7 +133,8 @@ void BLE_init() {
 
     dataChar = service->createCharacteristic(
         DATA_CHAR_UUID,
-        NIMBLE_PROPERTY::WRITE_NR
+        NIMBLE_PROPERTY::WRITE_NR |
+        NIMBLE_PROPERTY::NOTIFY
     );
     dataChar->setCallbacks(&dataCallbacks);
 
@@ -148,7 +160,7 @@ void BLE_init() {
 }
 
 void BLE_update() {
-    // placeholder for future expansion
+    // placeholder for future periodic BLE tasks
 }
 
 bool BLE_isConnected() {
@@ -176,6 +188,16 @@ void BLE_notifyMetrics(const MetricsPacket& metrics) {
         sizeof(MetricsPacket)
     );
     metricsChar->notify();
+}
+
+void BLE_notifyDataEcho(const DataPacket& packet) {
+    if (!deviceConnected) return;
+
+    dataChar->setValue(
+        (uint8_t*)&packet,
+        sizeof(DataPacket)
+    );
+    dataChar->notify();
 }
 
 void BLE_notifyAck(const AckPacket& ack) {

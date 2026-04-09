@@ -393,10 +393,20 @@
     // Metrics Computation State
     let lastMetricsArrivalUs = null;
     let intervalDeltasUs = [];
-    let lastTxBytes = null;
-    let lastUptimeMs = null;
-    let rttSamplesUs = [];
-    let lastSentDataTimestampUs = null;
+
+    // Sequence-matched link metrics from data echo packets
+    const pendingPackets = new Map();
+    const MAX_PENDING_PACKETS = 400;
+    const RTT_SAMPLE_WINDOW = 100;
+    const MIN_PACKET_TIMEOUT_US = 400000;
+    const rttSamplesUs = [];
+
+    let sentPacketCount = 0;
+    let echoedPacketCount = 0;
+    let echoedPayloadBytes = 0;
+    let perErrorPackets = 0;
+    let timedOutPacketCount = 0;
+    let btTestStartUs = null;
 
     // Command IDs
     const STOP_MOTOR = 0b00;
@@ -513,6 +523,14 @@
         updateUI();
         logCommand(`Connected to ${DEVICE_NAME}`);
 
+        // Enable data echo notifications
+        await dataChar.startNotifications();
+        dataChar.addEventListener(
+          "characteristicvaluechanged",
+          handleDataEchoNotification
+        );
+        logCommand("Data echo notifications enabled");
+
         // Enable notifications (metrics come back this way)
         await metricsChar.startNotifications();
         metricsChar.addEventListener(
@@ -594,6 +612,17 @@
         alert("Bluetooth test already running");
         return;
       }
+
+      packetSeq = 0;
+      pendingPackets.clear();
+      rttSamplesUs.length = 0;
+      sentPacketCount = 0;
+      echoedPacketCount = 0;
+      echoedPayloadBytes = 0;
+      perErrorPackets = 0;
+      timedOutPacketCount = 0;
+      btTestStartUs = performance.now() * 1000;
+
       bluetoothTestRunning = true;
       updateUI();
 
@@ -689,22 +718,99 @@
 
       const buffer = new ArrayBuffer(16);
       const view = new DataView(buffer);
+      const nowUs = performance.now() * 1000;
+      const seq = packetSeq++;
 
-      lastSentDataTimestampUs = performance.now() * 1000;
-
-      view.setUint32(0, packetSeq++, true);
-      view.setUint32(4, lastSentDataTimestampUs, true);
+      view.setUint32(0, seq, true);
+      view.setUint32(4, Math.floor(nowUs), true);
       view.setUint32(8, 0xAAAAAAAA, true);
       view.setUint32(12, 0xBBBBBBBB, true);
 
-      try {
-        await dataChar.writeValueWithoutResponse(buffer);
-      } catch (e) {
-        console.error("Packet send failed:", e);
+      pendingPackets.set(seq, {
+        sendUs: nowUs,
+        p0: 0xAAAAAAAA,
+        p1: 0xBBBBBBBB,
+        sizeBytes: buffer.byteLength
+      });
+
+      if (pendingPackets.size > MAX_PENDING_PACKETS) {
+        const oldestSeq = pendingPackets.keys().next().value;
+        pendingPackets.delete(oldestSeq);
       }
 
-      logCommand(`Sent Data packet #${packetSeq - 1}`);
+      try {
+        await dataChar.writeValueWithoutResponse(buffer);
+        sentPacketCount++;
+      } catch (e) {
+        pendingPackets.delete(seq);
+        console.error("Packet send failed:", e);
+        setTimeout(sendDataPacket, bluetoothConfig.sendIntervalMs);
+        return;
+      }
+
+      logCommand(`Sent Data packet #${seq}`);
       setTimeout(sendDataPacket, bluetoothConfig.sendIntervalMs);
+    }
+
+    function sweepTimedOutPackets(nowUs) {
+      const timeoutUs = Math.max(
+        MIN_PACKET_TIMEOUT_US,
+        bluetoothConfig.sendIntervalMs * 3000
+      );
+
+      for (const [seq, pkt] of pendingPackets) {
+        if ((nowUs - pkt.sendUs) > timeoutUs) {
+          pendingPackets.delete(seq);
+          timedOutPacketCount++;
+        }
+      }
+    }
+
+    function popcount32(x) {
+      x >>>= 0;
+      let count = 0;
+      while (x) {
+        x &= (x - 1) >>> 0;
+        count++;
+      }
+      return count;
+    }
+
+    function handleDataEchoNotification(event) {
+      const dv = event.target.value;
+      if (dv.byteLength !== 16) return;
+
+      const view = new DataView(dv.buffer, dv.byteOffset, dv.byteLength);
+      const seq = view.getUint32(0, true);
+      const echoedTimestampUs = view.getUint32(4, true);
+      const echoedP0 = view.getUint32(8, true);
+      const echoedP1 = view.getUint32(12, true);
+
+      const nowUs = performance.now() * 1000;
+      sweepTimedOutPackets(nowUs);
+
+      const sent = pendingPackets.get(seq);
+      if (!sent) return;
+
+      pendingPackets.delete(seq);
+      echoedPacketCount++;
+      echoedPayloadBytes += sent.sizeBytes;
+
+      const rttUs = nowUs - sent.sendUs;
+      rttSamplesUs.push(rttUs);
+      if (rttSamplesUs.length > RTT_SAMPLE_WINDOW) {
+        rttSamplesUs.shift();
+      }
+
+      const sentTsUs = Math.floor(sent.sendUs) >>> 0;
+      const bitErrors =
+        popcount32((echoedTimestampUs ^ sentTsUs) >>> 0) +
+        popcount32((echoedP0 ^ sent.p0) >>> 0) +
+        popcount32((echoedP1 ^ sent.p1) >>> 0);
+
+      if (bitErrors > 0) {
+        perErrorPackets++;
+      }
     }
 
     function handleMetricsNotification(event) {
@@ -712,7 +818,7 @@
       const dv = event.target.value;
       if (dv.byteLength !== 28) return;
 
-      const view = new DataView(dv.buffer);
+      const view = new DataView(dv.buffer, dv.byteOffset, dv.byteLength);
 
       const pkt = {
         timestampMs: view.getUint32(0, true),
@@ -747,28 +853,7 @@
         arrivalJitterUs = Math.sqrt(variance);
       }
 
-      // Throughput
-      let throughputKbps = 0;
-      if (lastTxBytes !== null && lastUptimeMs !== null) {
-        const bytesDelta = pkt.txBytes - lastTxBytes;
-        const timeDeltaSec = (pkt.uptimeMs - lastUptimeMs) / 1000;
-        if (timeDeltaSec > 0) {
-          throughputKbps =
-            (bytesDelta * 8) / timeDeltaSec / 1000;
-        }
-      }
-      lastTxBytes = pkt.txBytes;
-      lastUptimeMs = pkt.uptimeMs;
-
-      // RTT Latency (Data timestamp echo)
-      const lastDataTimestampUs = lastSentDataTimestampUs;
-      let rttUs = 0;
-      if (lastDataTimestampUs) {
-        rttUs = nowUs - lastDataTimestampUs;
-        rttSamplesUs.push(rttUs);
-        if (rttSamplesUs.length > 50) rttSamplesUs.shift();
-      }
-
+      // Sequence-matched RTT average from data echoes
       let avgRttUs = 0;
       if (rttSamplesUs.length) {
         avgRttUs =
@@ -776,10 +861,25 @@
           rttSamplesUs.length;
       }
 
+      // Throughput over the current test window (echoed packets only)
+      let throughputKbps = 0;
+      const elapsedUs = btTestStartUs ? (nowUs - btTestStartUs) : 0;
+      if (elapsedUs > 0) {
+        throughputKbps =
+          (echoedPayloadBytes * 8) / (elapsedUs / 1e6) / 1000;
+      }
+
+      // PER combines integrity errors and packets that appear dropped
+      sweepTimedOutPackets(nowUs);
+      const erroredPackets = perErrorPackets + timedOutPacketCount;
+      const per = sentPacketCount > 0 ? (erroredPackets / sentPacketCount) : 0;
+
       logData(
         `Metrics @ ${pkt.timestampMs}ms: ` +
         `RTT=${Math.round(avgRttUs)}us, ` +
-        `Jitter=${Math.round(arrivalJitterUs)}us, ` +
+        `PER=${(per * 100).toFixed(2)}%, ` +
+        `HostJitter=${Math.round(arrivalJitterUs)}us, ` +
+        `FwJitter=${pkt.intervalJitterUs}us, ` +
         `Throughput=${throughputKbps.toFixed(2)}kbps, ` +
         `Overruns=${pkt.sendOverruns}`
       );
@@ -789,7 +889,7 @@
       const data = event.target.value;
       if (data.byteLength !== 6) return; // safety check for expected ACK packet size
 
-      const view = new DataView(data.buffer);
+      const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
       const commandId = view.getUint8(0);
       const status = view.getUint8(1);

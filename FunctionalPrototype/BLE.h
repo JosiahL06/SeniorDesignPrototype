@@ -24,5 +24,8 @@ CommandPacket BLE_getCommand();
 // Metrics notification
 void BLE_notifyMetrics(const MetricsPacket& metrics);
 
+// Echo data packet back to the client for RTT/PER measurement
+void BLE_notifyDataEcho(const DataPacket& packet);
+
 // ACK notification
 void BLE_notifyAck(const AckPacket& ack);
