@@ -372,6 +372,13 @@
     let metricsChar = null;
     let ackChar = null;
     let connected = false;
+    let isReconnecting = false;
+    let reconnectTimerId = null;
+    let reconnectAttempts = 0;
+    let manualDisconnectRequested = false;
+
+    const RECONNECT_INTERVAL_MS = 1000;
+    const MAX_AUTO_RECONNECT_ATTEMPTS = 10;
 
     // Motor Test Configurations
     let motorConfig = {
@@ -427,8 +434,15 @@
       const connectBtn = document.getElementById("connect-btn");
       const disconnectBtn = document.getElementById("disconnect-btn");
 
-      connectBtn.disabled = connected;
-      connectBtn.textContent = connected ? "Connected" : "Connect";
+      connectBtn.disabled = connected || isReconnecting;
+      if (connected) {
+        connectBtn.textContent = "Connected";
+      } else if (isReconnecting) {
+        connectBtn.textContent = "Reconnecting...";
+      } else {
+        connectBtn.textContent = "Connect";
+      }
+      connectBtn.classList.toggle("connecting", isReconnecting && !connected);
       connectBtn.classList.toggle("connected", connected);
       disconnectBtn.classList.toggle("hidden", !connected);
 
@@ -469,7 +483,10 @@
       stopBtn.classList.toggle("hidden", !connected || !anyTestRunning);
 
       // ----- Status Text -----
-      if (!connected) {
+      if (!connected && isReconnecting) {
+        statusEl.textContent = "Connection lost. Reconnecting...";
+        statusEl.className = "status disconnected";
+      } else if (!connected) {
         statusEl.textContent = "Disconnected";
         statusEl.className = "status disconnected";
       } else if (anyTestRunning) {
@@ -500,55 +517,29 @@
       if (!unlocked) return;
 
       try {
+        clearReconnectTimer();
+        manualDisconnectRequested = false;
+        isReconnecting = false;
+        reconnectAttempts = 0;
+
         document.getElementById("connect-btn").textContent = "Connecting..."
         document.getElementById("connect-btn").classList.add("connecting");
 
-        device = await navigator.bluetooth.requestDevice({
-          filters: [{
-            services: [SERVICE_UUID]
-          }],
-        });
+        if (!device) {
+          device = await navigator.bluetooth.requestDevice({
+            filters: [{
+              services: [SERVICE_UUID]
+            }],
+          });
 
-        device.addEventListener('gattserverdisconnected', disconnectBLE);
+          device.addEventListener("gattserverdisconnected", handleGattDisconnected);
+        }
 
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(SERVICE_UUID);
-
-        cmdChar = await service.getCharacteristic(CMD_CHAR_UUID);
-        dataChar = await service.getCharacteristic(DATA_CHAR_UUID);
-        metricsChar = await service.getCharacteristic(METRICS_CHAR_UUID);
-        ackChar = await service.getCharacteristic(ACK_CHAR_UUID);
-
-        connected = true;
-        updateUI();
-        logCommand(`Connected to ${DEVICE_NAME}`);
-
-        // Enable data echo notifications
-        await dataChar.startNotifications();
-        dataChar.addEventListener(
-          "characteristicvaluechanged",
-          handleDataEchoNotification
-        );
-        logCommand("Data echo notifications enabled");
-
-        // Enable notifications (metrics come back this way)
-        await metricsChar.startNotifications();
-        metricsChar.addEventListener(
-          "characteristicvaluechanged",
-          handleMetricsNotification
-        );
-        logCommand("Metrics notifications enabled");
-
-        // Enable ACK notifications
-        await ackChar.startNotifications();
-        ackChar.addEventListener(
-          "characteristicvaluechanged",
-          handleAckNotification
-        );
-        logCommand("ACK notifications enabled");
+        await connectToDevice(device);
       }
       catch (error) {
         console.error(error);
+        isReconnecting = false;
         statusEl.textContent = "Connection failed";
         statusEl.className = "status disconnected";
         document.getElementById("connect-btn").classList.remove("connecting");
@@ -557,15 +548,129 @@
       }
     }
 
-    function disconnectBLE() {
-      if (!connected) return;
+    async function connectToDevice(targetDevice) {
+      const server = await targetDevice.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+
+      cmdChar = await service.getCharacteristic(CMD_CHAR_UUID);
+      dataChar = await service.getCharacteristic(DATA_CHAR_UUID);
+      metricsChar = await service.getCharacteristic(METRICS_CHAR_UUID);
+      ackChar = await service.getCharacteristic(ACK_CHAR_UUID);
+
+      // Reset listeners so reconnects do not duplicate notification handlers.
+      dataChar.removeEventListener("characteristicvaluechanged", handleDataEchoNotification);
+      metricsChar.removeEventListener("characteristicvaluechanged", handleMetricsNotification);
+      ackChar.removeEventListener("characteristicvaluechanged", handleAckNotification);
+
+      await dataChar.startNotifications();
+      dataChar.addEventListener("characteristicvaluechanged", handleDataEchoNotification);
+
+      await metricsChar.startNotifications();
+      metricsChar.addEventListener("characteristicvaluechanged", handleMetricsNotification);
+
+      await ackChar.startNotifications();
+      ackChar.addEventListener("characteristicvaluechanged", handleAckNotification);
+
+      connected = true;
+      isReconnecting = false;
+      reconnectAttempts = 0;
+
+      document.getElementById("connect-btn").classList.remove("connecting");
+      updateUI();
+      logCommand(`Connected to ${DEVICE_NAME}`);
+      logCommand("Data echo notifications enabled");
+      logCommand("Metrics notifications enabled");
+      logCommand("ACK notifications enabled");
+    }
+
+    function clearReconnectTimer() {
+      if (reconnectTimerId !== null) {
+        clearTimeout(reconnectTimerId);
+        reconnectTimerId = null;
+      }
+    }
+
+    function scheduleReconnect() {
+      if (!device || manualDisconnectRequested || !unlocked || reconnectTimerId !== null) {
+        return;
+      }
+
+      if (reconnectAttempts >= MAX_AUTO_RECONNECT_ATTEMPTS) {
+        isReconnecting = false;
+        reconnectAttempts = 0;
+        document.getElementById("connect-btn").classList.remove("connecting");
+        updateUI();
+        statusEl.textContent = "Connection failed";
+        statusEl.className = "status disconnected";
+        logCommand("Connection failed");
+        return;
+      }
+
+      const delayMs = RECONNECT_INTERVAL_MS;
+      reconnectAttempts++;
+      isReconnecting = true;
+
+      updateUI();
+      logCommand(`Connection lost. Reconnect attempt ${reconnectAttempts} in ${delayMs}ms`);
+
+      reconnectTimerId = setTimeout(async () => {
+        reconnectTimerId = null;
+
+        if (!device || manualDisconnectRequested || connected) return;
+
+        try {
+          document.getElementById("connect-btn").textContent = "Reconnecting...";
+          document.getElementById("connect-btn").classList.add("connecting");
+          await connectToDevice(device);
+          logCommand("Auto-reconnect successful");
+        } catch (error) {
+          console.error("Auto-reconnect failed:", error);
+          connected = false;
+          cmdChar = null;
+          dataChar = null;
+          metricsChar = null;
+          ackChar = null;
+          scheduleReconnect();
+        }
+      }, delayMs);
+    }
+
+    function handleGattDisconnected() {
       connected = false;
+      cmdChar = null;
+      dataChar = null;
+      metricsChar = null;
+      ackChar = null;
+      motorTestRunning = false;
+      bluetoothTestRunning = false;
+
+      if (manualDisconnectRequested) {
+        isReconnecting = false;
+        reconnectAttempts = 0;
+        document.getElementById("connect-btn").classList.remove("connecting");
+        updateUI();
+        manualDisconnectRequested = false;
+        return;
+      }
+
+      isReconnecting = true;
+      updateUI();
+      scheduleReconnect();
+    }
+
+    function disconnectBLE() {
+      if (!device) return;
+
+      manualDisconnectRequested = true;
+      clearReconnectTimer();
+      connected = false;
+      isReconnecting = false;
+      reconnectAttempts = 0;
 
       if (device?.gatt?.connected) {
         device.gatt.disconnect();
       }
 
-      device = null;
       cmdChar = null;
       dataChar = null;
       metricsChar = null;
