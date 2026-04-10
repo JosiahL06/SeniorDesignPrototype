@@ -570,7 +570,8 @@
       dataChar = null;
       metricsChar = null;
       ackChar = null;
-      testRunning = false;
+      motorTestRunning = false;
+      bluetoothTestRunning = false;
 
       document.getElementById("connect-btn").classList.remove("connecting");
       updateUI();
@@ -592,13 +593,7 @@
       await sendCommandPacket(START_MOTOR);
       motorTestRunning = true;
       updateUI();
-
-      const runTimeMs = 1000 * motorConfig.degrees / 360 * 100 / motorConfig.speed;
-      setTimeout(() => {
-        motorTestRunning = false;
-        updateUI();
-        logCommand("Motor test completed");
-      }, runTimeMs + 500); // add buffer to ensure we don't cut off early
+      logCommand("Motor test started, waiting for ACK");
     }
 
     async function startBluetoothTest() {
@@ -899,6 +894,27 @@
       const commandStr = getCommandName(commandId);
 
       logCommand(`ACK: ${commandStr} [${statusStr}] at ${timestampMs}ms`);
+
+      if (commandId === START_MOTOR) {
+        motorTestRunning = false;
+        updateUI();
+
+        if (status === ACK_SUCCESS) {
+          logCommand("Motor test completed");
+        } else {
+          logCommand("Motor test ended with error ACK");
+        }
+      }
+
+      if (commandId === STOP_MOTOR) {
+        motorTestRunning = false;
+        updateUI();
+      }
+
+      if (commandId === STOP_BT) {
+        bluetoothTestRunning = false;
+        updateUI();
+      }
     }
 
     function getCommandName(commandId) {
