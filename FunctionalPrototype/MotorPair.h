@@ -1,5 +1,8 @@
 #pragma once
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 class MotorPair {
 public:
@@ -14,8 +17,8 @@ public:
 
     void begin();
 
-    // Non-blocking control
-    void start(uint16_t degrees, uint8_t speedPercent, bool reverse);
+    // Queue a motion request for the FreeRTOS control task.
+    bool start(uint16_t degrees, uint8_t speedPercent, bool reverse);
     void update();
     void stop();
 
@@ -26,7 +29,13 @@ public:
 
 private:
     enum class State { IDLE, RUNNING, DONE, STALLED };
-    State _state = State::IDLE;
+    volatile State _state = State::IDLE;
+
+    struct MotionCommand {
+        uint16_t degrees;
+        uint8_t speedPercent;
+        bool reverse;
+    };
 
     // Pins
     int _pwma, _ain1, _ain2;
@@ -37,14 +46,21 @@ private:
     // Encoder
     volatile long* _encoderCount;
     int _cpr;
-    int _directionSign = 1;
+    volatile int _directionSign = 1;
+
+    // FreeRTOS control
+    QueueHandle_t _commandQueue = nullptr;
+    TaskHandle_t _taskHandle = nullptr;
+    bool _taskStarted = false;
 
     // Motion parameters
     long _targetCounts = 0;
     int _basePWM = 0;
+    int _adaptiveBoost = 0;
 
     // Stall detection
     long _lastProgress = 0;
+    long _lastSamplePos = 0;
     unsigned long _lastProgressMs = 0;
 
     // Tuning constants
@@ -53,7 +69,19 @@ private:
     static constexpr int STALL_COUNTS = 2;
     static constexpr int STALL_TIMEOUT_MS = 200;
     static constexpr int SLOW_ZONE_DIV = 8;
+    static constexpr int LOAD_BOOST_STEP = 5;
+    static constexpr int LOAD_BOOST_DECAY = 1;
+    static constexpr int LOAD_BOOST_MAX = MAX_PWM;
+    static constexpr uint32_t CONTROL_PERIOD_MS = 5;
+    static constexpr UBaseType_t TASK_PRIORITY = 5;
+    static constexpr uint32_t COMMAND_QUEUE_LENGTH = 6;
 
     void setDirection(bool reverse);
     long getPositionCounts() const;
+    void runTask();
+    void executeCommand(const MotionCommand& command);
+    void stopHardware();
+    void flushPendingCommands();
+
+    static void taskEntry(void* parameter);
 };

@@ -42,6 +42,8 @@ const int countsPerRevolution = 1727 * 2; // 1727 pulses per revolution * 2 coun
 volatile long enc1_count = 0;
 volatile long enc2_count = 0;
 
+portMUX_TYPE encoderMux = portMUX_INITIALIZER_UNLOCKED;
+
 MotorPair motorPair1(
     PWMA_1, AIN1_1, AIN2_1,
     PWMB_1, BIN1_1, BIN2_1,
@@ -68,26 +70,34 @@ const int ENCB_2 = 20;
 
 void IRAM_ATTR isrEncA_1()
 {
+  portENTER_CRITICAL_ISR(&encoderMux);
   bool b = digitalRead(ENCB_1);
   enc1_count += b ? +1 : -1;
+  portEXIT_CRITICAL_ISR(&encoderMux);
 }
 
 void IRAM_ATTR isrEncB_1()
 {
+  portENTER_CRITICAL_ISR(&encoderMux);
   bool a = digitalRead(ENCA_1);
   enc1_count += a ? -1 : +1;
+  portEXIT_CRITICAL_ISR(&encoderMux);
 }
 
 void IRAM_ATTR isrEncA_2()
 {
+  portENTER_CRITICAL_ISR(&encoderMux);
   bool b = digitalRead(ENCB_2);
   enc2_count += b ? +1 : -1;
+  portEXIT_CRITICAL_ISR(&encoderMux);
 }
 
 void IRAM_ATTR isrEncB_2()
 {
+  portENTER_CRITICAL_ISR(&encoderMux);
   bool a = digitalRead(ENCA_2);
   enc2_count += a ? -1 : +1;
+  portEXIT_CRITICAL_ISR(&encoderMux);
 }
 
 // =============================
@@ -162,33 +172,7 @@ void loop()
 {
   BLE_update();
 
-  motorPair1.update();
-  motorPair2.update();
-
-  if (BLE_isConnected())
-  {
-    uint32_t nowMs = millis();
-
-    int32_t position1Counts = (int32_t)motorPair1.getSignedPositionCounts();
-    if (position1Counts != lastReportedPosition1Counts ||
-        nowMs - lastPosition1SendMs >= positionIntervalMs)
-    {
-      BLE_notifyMotorPosition1(position1Counts);
-      lastReportedPosition1Counts = position1Counts;
-      lastPosition1SendMs = nowMs;
-    }
-
-    int32_t position2Counts = (int32_t)motorPair2.getSignedPositionCounts();
-    if (position2Counts != lastReportedPosition2Counts ||
-        nowMs - lastPosition2SendMs >= positionIntervalMs)
-    {
-      BLE_notifyMotorPosition2(position2Counts);
-      lastReportedPosition2Counts = position2Counts;
-      lastPosition2SendMs = nowMs;
-    }
-  }
-
-  if (BLE_hasNewCommand())
+  while (BLE_hasNewCommand())
   {
     CommandPacket cmd = BLE_getCommand();
 
@@ -242,6 +226,29 @@ void loop()
 
     default:
       break;
+    }
+  }
+
+  if (BLE_isConnected())
+  {
+    uint32_t nowMs = millis();
+
+    int32_t position1Counts = (int32_t)motorPair1.getSignedPositionCounts();
+    if (position1Counts != lastReportedPosition1Counts ||
+        nowMs - lastPosition1SendMs >= positionIntervalMs)
+    {
+      BLE_notifyMotorPosition1(position1Counts);
+      lastReportedPosition1Counts = position1Counts;
+      lastPosition1SendMs = nowMs;
+    }
+
+    int32_t position2Counts = (int32_t)motorPair2.getSignedPositionCounts();
+    if (position2Counts != lastReportedPosition2Counts ||
+        nowMs - lastPosition2SendMs >= positionIntervalMs)
+    {
+      BLE_notifyMotorPosition2(position2Counts);
+      lastReportedPosition2Counts = position2Counts;
+      lastPosition2SendMs = nowMs;
     }
   }
 

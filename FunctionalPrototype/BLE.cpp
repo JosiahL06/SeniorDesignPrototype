@@ -23,11 +23,10 @@ static NimBLECharacteristic* ackChar;
 static NimBLECharacteristic* position1Char;
 static NimBLECharacteristic* position2Char;
 
+static QueueHandle_t commandQueue = nullptr;
+
 static bool deviceConnected = false;
 static bool bluetoothTestRunning = false;
-
-static CommandPacket latestCmd{};
-static volatile bool newCommandAvailable = false;
 
 // =============================
 // Server Callbacks
@@ -67,17 +66,19 @@ class CmdCallbacks : public NimBLECharacteristicCallbacks {
         const std::string& value = c->getValue();
         if (value.length() != 3) return;
 
-        latestCmd = unpackCommand(value);
-        newCommandAvailable = true;
+        CommandPacket command = unpackCommand(value);
+        if (commandQueue) {
+            xQueueSendToBack(commandQueue, &command, 0);
+        }
 
-        if (latestCmd.commandId == START_BT)
+        if (command.commandId == START_BT)
             bluetoothTestRunning = true;
-        else if (latestCmd.commandId == STOP_BT)
+        else if (command.commandId == STOP_BT)
             bluetoothTestRunning = false;
 
         // Send ACK notification
         AckPacket ack{};
-        ack.commandId = latestCmd.commandId;
+        ack.commandId = command.commandId;
         ack.status = ACK_SUCCESS;
         ack.timestampMs = millis();
         BLE_notifyAck(ack);
@@ -116,6 +117,10 @@ static DataCallbacks dataCallbacks;
 // =============================
 
 void BLE_init() {
+    if (!commandQueue) {
+        commandQueue = xQueueCreate(8, sizeof(CommandPacket));
+    }
+
     NimBLEDevice::init(DEVICE_NAME);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
     NimBLEDevice::setMTU(247);
@@ -186,12 +191,16 @@ bool BLE_isBtTestRunning() {
 }
 
 bool BLE_hasNewCommand() {
-    return newCommandAvailable;
+    return commandQueue && uxQueueMessagesWaiting(commandQueue) > 0;
 }
 
 CommandPacket BLE_getCommand() {
-    newCommandAvailable = false;
-    return latestCmd;
+    CommandPacket command{};
+    if (commandQueue) {
+        xQueueReceive(commandQueue, &command, 0);
+    }
+
+    return command;
 }
 
 void BLE_notifyMetrics(const MetricsPacket& metrics) {
