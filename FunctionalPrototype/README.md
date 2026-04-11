@@ -77,14 +77,15 @@ If any of these change, update both the sketch and this README.
 | ENCA_2 | D19 |
 | ENCB_2 | D20 |
 
-## Build and Flash
+## Build and Upload
 
-1. Open `FunctionalPrototype.ino` in the Arduino IDE or your preferred ESP32 development environment.
-2. Select the correct board (Arduino Nano ESP32) and serial port (should auto-select or show only one available port).
+1. Open `FunctionalPrototype.ino` in the Arduino IDE (or optionally, visual studio code with the arduino extension).
+2. Select the correct board (Arduino Nano ESP32) and serial port (should auto-select or show only one available port, choose that one).
 3. Install any required ESP32 Arduino core support if it is not already present.
-4. Build and upload the sketch to the board.
-5. Disconnect Serial Port after uploading the code
-6. The code will now automatically run when the Arduino is powered
+4. Connect your laptop or PC to the arduino with a usb-c connector (the Arduino IDE should detect the connection/COM port)
+5. Upload the sketch to the board.
+6. Disconnect the usb-c after uploading the code
+7. The code will now automatically run when the Arduino is powered on
 
 ## Runtime Behavior
 
