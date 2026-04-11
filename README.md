@@ -51,4 +51,3 @@ The website and Arduino firmware use the same BLE service and characteristic UUI
 - The site depends on Web Bluetooth, so unsupported browsers will not be able to connect.
 - If the device does not appear, confirm that the firmware is running and advertising the expected BLE name.
 - If commands do not have the expected effect, verify that the website and firmware are using the same command set and BLE service UUID.
-
