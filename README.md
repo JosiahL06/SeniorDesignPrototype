@@ -6,7 +6,7 @@ The control panel is a browser-based interface for the functional prototype's BL
 
 Open the control panel here:
 
-https://josiahl06.github.io/SeniorDesignPrototype/
+[https://josiahl06.github.io/SeniorDesignPrototype/](https://josiahl06.github.io/SeniorDesignPrototype/)
 
 ## Requirements
 
