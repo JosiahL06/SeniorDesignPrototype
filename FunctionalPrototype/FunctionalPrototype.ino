@@ -100,6 +100,7 @@ const int msPerRev = 60000 / motorRPM;
 // BLE Metrics
 // =============================
 uint32_t metricsIntervalMs = 0;
+uint32_t positionIntervalMs = 50;
 
 uint32_t txCount = 0;
 uint32_t txBytes = 0;
@@ -112,6 +113,11 @@ uint32_t sendOverruns = 0;
 
 uint64_t lastSendTimeUs = 0;
 uint32_t testStartMs = 0;
+
+int32_t lastReportedPosition1Counts = INT32_MIN;
+int32_t lastReportedPosition2Counts = INT32_MIN;
+uint32_t lastPosition1SendMs = 0;
+uint32_t lastPosition2SendMs = 0;
 
 // =============================
 // Setup - Initialize BLE Connection
@@ -159,6 +165,29 @@ void loop()
   motorPair1.update();
   motorPair2.update();
 
+  if (BLE_isConnected())
+  {
+    uint32_t nowMs = millis();
+
+    int32_t position1Counts = (int32_t)motorPair1.getSignedPositionCounts();
+    if (position1Counts != lastReportedPosition1Counts ||
+        nowMs - lastPosition1SendMs >= positionIntervalMs)
+    {
+      BLE_notifyMotorPosition1(position1Counts);
+      lastReportedPosition1Counts = position1Counts;
+      lastPosition1SendMs = nowMs;
+    }
+
+    int32_t position2Counts = (int32_t)motorPair2.getSignedPositionCounts();
+    if (position2Counts != lastReportedPosition2Counts ||
+        nowMs - lastPosition2SendMs >= positionIntervalMs)
+    {
+      BLE_notifyMotorPosition2(position2Counts);
+      lastReportedPosition2Counts = position2Counts;
+      lastPosition2SendMs = nowMs;
+    }
+  }
+
   if (BLE_hasNewCommand())
   {
     CommandPacket cmd = BLE_getCommand();
@@ -198,6 +227,10 @@ void loop()
       break;
 
     case START_MOTOR:
+      lastReportedPosition1Counts = INT32_MIN;
+      lastReportedPosition2Counts = INT32_MIN;
+      lastPosition1SendMs = 0;
+      lastPosition2SendMs = 0;
       motorPair1.start(cmd.degrees, cmd.speed, cmd.reverse);
       motorPair2.start(cmd.degrees, cmd.speed, !cmd.reverse);
       break;

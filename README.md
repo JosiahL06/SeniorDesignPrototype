@@ -30,3 +30,4 @@ The control panel buttons send plain-text commands to the arduino over BLE:
 | Command | Action |
 |------|------|
 | `*command*` | *command description* |
+

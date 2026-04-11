@@ -106,6 +106,10 @@ bool MotorPair::isRunning() const { return _state == State::RUNNING; }
 bool MotorPair::isDone() const    { return _state == State::DONE; }
 bool MotorPair::isStalled() const { return _state == State::STALLED; }
 
+long MotorPair::getSignedPositionCounts() const {
+    return _directionSign * getPositionCounts();
+}
+
 void MotorPair::setDirection(bool reverse) {
     if (reverse) {
         digitalWrite(_ain1, LOW);

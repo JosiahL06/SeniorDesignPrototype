@@ -10,6 +10,8 @@
 #define DATA_CHAR_UUID     "fef211ef-bc20-4f2f-9e9d-3cb6c7b6f772"
 #define METRICS_CHAR_UUID  "555ff5a9-d76d-4945-b7a2-f26612fc5be5"
 #define ACK_CHAR_UUID      "a2a1c8b3-4d7e-4f2a-9b1c-8e7d5f3a2b1c"
+#define POSITION1_CHAR_UUID "d8cfb4a5-7d1b-4d40-8f7f-f6a7f4f0c4e1"
+#define POSITION2_CHAR_UUID "4f5cc7fd-1f5c-4aab-82fb-0d6f3dbe7b2b"
 
 // =============================
 // BLE State
@@ -18,6 +20,8 @@ static NimBLECharacteristic* cmdChar;
 static NimBLECharacteristic* dataChar;
 static NimBLECharacteristic* metricsChar;
 static NimBLECharacteristic* ackChar;
+static NimBLECharacteristic* position1Char;
+static NimBLECharacteristic* position2Char;
 
 static bool deviceConnected = false;
 static bool bluetoothTestRunning = false;
@@ -148,6 +152,16 @@ void BLE_init() {
         NIMBLE_PROPERTY::NOTIFY
     );
 
+    position1Char = service->createCharacteristic(
+        POSITION1_CHAR_UUID,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
+    position2Char = service->createCharacteristic(
+        POSITION2_CHAR_UUID,
+        NIMBLE_PROPERTY::NOTIFY
+    );
+
     service->start();
 
     NimBLEAdvertising* adv =
@@ -188,6 +202,26 @@ void BLE_notifyMetrics(const MetricsPacket& metrics) {
         sizeof(MetricsPacket)
     );
     metricsChar->notify();
+}
+
+void BLE_notifyMotorPosition1(int32_t positionCounts) {
+    if (!deviceConnected) return;
+
+    position1Char->setValue(
+        (uint8_t*)&positionCounts,
+        sizeof(positionCounts)
+    );
+    position1Char->notify();
+}
+
+void BLE_notifyMotorPosition2(int32_t positionCounts) {
+    if (!deviceConnected) return;
+
+    position2Char->setValue(
+        (uint8_t*)&positionCounts,
+        sizeof(positionCounts)
+    );
+    position2Char->notify();
 }
 
 void BLE_notifyDataEcho(const DataPacket& packet) {

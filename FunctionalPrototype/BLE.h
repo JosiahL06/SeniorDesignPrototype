@@ -24,6 +24,10 @@ CommandPacket BLE_getCommand();
 // Metrics notification
 void BLE_notifyMetrics(const MetricsPacket& metrics);
 
+// Compact motor position notifications
+void BLE_notifyMotorPosition1(int32_t positionCounts);
+void BLE_notifyMotorPosition2(int32_t positionCounts);
+
 // Echo data packet back to the client for RTT/PER measurement
 void BLE_notifyDataEcho(const DataPacket& packet);
 

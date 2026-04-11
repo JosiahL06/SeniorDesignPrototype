@@ -22,6 +22,7 @@ public:
     bool isRunning() const;
     bool isDone() const;
     bool isStalled() const;
+    long getSignedPositionCounts() const;
 
 private:
     enum class State { IDLE, RUNNING, DONE, STALLED };
