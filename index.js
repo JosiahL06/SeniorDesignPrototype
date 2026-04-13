@@ -62,6 +62,11 @@ let intervalDeltasUs = [];
 let latestPosition1Counts = null;
 let latestPosition2Counts = null;
 
+let position1OffsetCounts = 0;
+let position2OffsetCounts = 0;
+let pendingPosition1Rebase = false;
+let pendingPosition2Rebase = false;
+
 // Sequence-matched link metrics from data echo packets
 const pendingPackets = new Map();
 const MAX_PENDING_PACKETS = 400;
@@ -362,6 +367,11 @@ async function startMotorTest() {
         return;
     }
 
+    // Firmware may reset position counters when a new motor test starts.
+    // Mark both channels so the next reset-to-near-zero sample is rebased.
+    pendingPosition1Rebase = true;
+    pendingPosition2Rebase = true;
+
     await sendCommandPacket(START_MOTOR);
     motorTestRunning = true;
     updateUI();
@@ -645,8 +655,18 @@ function handlePosition1Notification(event) {
     const view = new DataView(dv.buffer, dv.byteOffset, dv.byteLength);
     const positionCounts = view.getInt32(0, true);
 
+    if (
+        pendingPosition1Rebase &&
+        latestPosition1Counts !== null &&
+        Math.abs(positionCounts) <= 20 &&
+        Math.abs(latestPosition1Counts - positionCounts) >= 100
+    ) {
+        position1OffsetCounts += latestPosition1Counts;
+        pendingPosition1Rebase = false;
+    }
+
     latestPosition1Counts = positionCounts;
-    updatePositionDisplay(1, positionCounts);
+    updatePositionDisplay(1, positionCounts + position1OffsetCounts);
 }
 
 function handlePosition2Notification(event) {
@@ -656,8 +676,18 @@ function handlePosition2Notification(event) {
     const view = new DataView(dv.buffer, dv.byteOffset, dv.byteLength);
     const positionCounts = view.getInt32(0, true);
 
+    if (
+        pendingPosition2Rebase &&
+        latestPosition2Counts !== null &&
+        Math.abs(positionCounts) <= 20 &&
+        Math.abs(latestPosition2Counts - positionCounts) >= 100
+    ) {
+        position2OffsetCounts += latestPosition2Counts;
+        pendingPosition2Rebase = false;
+    }
+
     latestPosition2Counts = positionCounts;
-    updatePositionDisplay(2, positionCounts);
+    updatePositionDisplay(2, positionCounts + position2OffsetCounts);
 }
 
 function updatePositionDisplay(pairNumber, positionCounts) {
@@ -668,11 +698,15 @@ function updatePositionDisplay(pairNumber, positionCounts) {
     const signedDegrees = formatDegrees(degrees);
 
     angleEl.textContent = signedDegrees;
-    countsEl.textContent = `${positionCounts} counts relative to horizontal reference`;
+    countsEl.textContent = `Relative to the horizontal`;
 }
 
 function countsToDegrees(positionCounts) {
-    return (positionCounts / COUNTS_PER_REVOLUTION) * 360;
+    const degrees = (positionCounts / COUNTS_PER_REVOLUTION) * 360;
+    const wrappedDegrees = degrees % 360;
+
+    // Avoid showing "-0.0°" after modulo operations.
+    return Object.is(wrappedDegrees, -0) ? 0 : wrappedDegrees;
 }
 
 function formatDegrees(degrees) {
@@ -682,6 +716,10 @@ function formatDegrees(degrees) {
 function resetPositionDisplay() {
     latestPosition1Counts = null;
     latestPosition2Counts = null;
+    position1OffsetCounts = 0;
+    position2OffsetCounts = 0;
+    pendingPosition1Rebase = false;
+    pendingPosition2Rebase = false;
     document.getElementById("position1-angle").textContent = "--.-°";
     document.getElementById("position1-counts").textContent = "Waiting for BLE position data";
     document.getElementById("position2-angle").textContent = "--.-°";

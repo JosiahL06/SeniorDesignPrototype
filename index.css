@@ -34,6 +34,20 @@ body {
 h1 {
     font-size: 1.4rem;
     margin-bottom: 24px;
+    text-align: center;
+}
+
+.logo-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.logo {
+    display: block;
+    max-width: 180px;
+    width: 100%;
+    height: auto;
 }
 
 h2 {
