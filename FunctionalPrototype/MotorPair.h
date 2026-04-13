@@ -66,8 +66,8 @@ private:
     // Tuning constants
     static constexpr int MIN_PWM = 60;
     static constexpr int MAX_PWM = 255;
-    static constexpr int STALL_COUNTS = 2;
-    static constexpr int STALL_TIMEOUT_MS = 200;
+    static constexpr int STALL_COUNTS = 20;
+    static constexpr int STALL_TIMEOUT_MS = 2000;
     static constexpr int SLOW_ZONE_DIV = 8;
     static constexpr int LOAD_BOOST_STEP = 5;
     static constexpr int LOAD_BOOST_DECAY = 1;
