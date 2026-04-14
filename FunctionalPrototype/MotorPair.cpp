@@ -85,7 +85,8 @@ bool MotorPair::isDone() const    { return _state == State::DONE; }
 bool MotorPair::isStalled() const { return _state == State::STALLED; }
 
 long MotorPair::getSignedPositionCounts() const {
-    return _directionSign * getPositionCounts();
+    // Report physical encoder direction directly; do not remap by command direction.
+    return getPositionCounts();
 }
 
 void MotorPair::taskEntry(void* parameter) {
@@ -129,6 +130,13 @@ void MotorPair::setDirection(bool reverse) {
     }
 }
 
+void MotorPair::setBrake() {
+    digitalWrite(_ain1, LOW);
+    digitalWrite(_ain2, LOW);
+    digitalWrite(_bin1, LOW);
+    digitalWrite(_bin2, LOW);
+}
+
 long MotorPair::getPositionCounts() const {
     if (!_encoderCount) return 0;
 
@@ -153,12 +161,30 @@ void MotorPair::executeCommand(const MotionCommand& command) {
     }
     portEXIT_CRITICAL(&encoderMux);
 
-    _lastProgress = 0;
+    _lastProgress = _targetCounts;
     _lastSamplePos = 0;
     _lastProgressMs = millis();
 
-    setDirection(command.reverse);
+    bool driveReverse = command.reverse;
+    setDirection(driveReverse);
     digitalWrite(_stby, HIGH);
+
+    long slowZone = _cpr / SLOW_ZONE_DIV;
+    if (slowZone < 1) {
+        slowZone = 1;
+    }
+
+    long finalApproachZone = _cpr / FINAL_APPROACH_DIV;
+    if (finalApproachZone < 1) {
+        finalApproachZone = 1;
+    }
+
+    long brakeZone = _cpr / 96;
+    if (brakeZone < 1) {
+        brakeZone = 1;
+    }
+
+    int precisionCruisePWM = min(_basePWM, PRECISION_PWM_CAP);
 
     while (true) {
         if (ulTaskNotifyTake(pdTRUE, 0) > 0) {
@@ -169,16 +195,26 @@ void MotorPair::executeCommand(const MotionCommand& command) {
 
         long pos = _directionSign * getPositionCounts();
         long remaining = _targetCounts - pos;
+        long remainingAbs = remaining < 0 ? -remaining : remaining;
         long sampleDelta = pos - _lastSamplePos;
 
-        if (remaining <= 0) {
+        if (remainingAbs <= FINAL_TOLERANCE_COUNTS) {
             stopHardware();
             _state = State::DONE;
             return;
         }
 
-        if (pos - _lastProgress >= STALL_COUNTS) {
-            _lastProgress = pos;
+        if (remainingAbs <= brakeZone) {
+            setBrake();
+            ledcWrite(_ledcA, MAX_PWM);
+            ledcWrite(_ledcB, MAX_PWM);
+            vTaskDelay(pdMS_TO_TICKS(BRAKE_PULSE_MS));
+            _lastSamplePos = pos;
+            continue;
+        }
+
+        if (remainingAbs < _lastProgress) {
+            _lastProgress = remainingAbs;
             _lastProgressMs = millis();
         } else if (millis() - _lastProgressMs > STALL_TIMEOUT_MS) {
             stopHardware();
@@ -186,19 +222,28 @@ void MotorPair::executeCommand(const MotionCommand& command) {
             return;
         }
 
-        long slowZone = _cpr / SLOW_ZONE_DIV;
-
         if (sampleDelta <= 0 && remaining > slowZone) {
             _adaptiveBoost = min(_adaptiveBoost + LOAD_BOOST_STEP, LOAD_BOOST_MAX);
-        } else if (_adaptiveBoost > 0) {
+        } else if (remaining > slowZone && _adaptiveBoost > 0) {
             _adaptiveBoost = max(_adaptiveBoost - LOAD_BOOST_DECAY, 0);
+        } else if (remaining <= slowZone) {
+            _adaptiveBoost = 0;
         }
 
-        int pwm = constrain(_basePWM + _adaptiveBoost, MIN_PWM, MAX_PWM);
-        if (slowZone > 0 && remaining < slowZone) {
-            pwm = map(remaining, 0, slowZone, MIN_PWM, _basePWM);
-            pwm = max(pwm, MIN_PWM);
-            pwm = constrain(pwm + _adaptiveBoost, MIN_PWM, MAX_PWM);
+        bool nextDriveReverse = remaining < 0 ? !command.reverse : command.reverse;
+        if (nextDriveReverse != driveReverse) {
+            driveReverse = nextDriveReverse;
+            setDirection(driveReverse);
+        }
+
+        int pwm = FINAL_PWM;
+        if (remainingAbs > slowZone) {
+            pwm = constrain(_basePWM + _adaptiveBoost, MIN_PWM, MAX_PWM);
+        } else if (remainingAbs > finalApproachZone) {
+            pwm = map(remainingAbs, finalApproachZone, slowZone, FINAL_PWM, precisionCruisePWM);
+            pwm = constrain(pwm, FINAL_PWM, precisionCruisePWM);
+        } else {
+            pwm = FINAL_PWM;
         }
 
         ledcWrite(_ledcA, pwm);

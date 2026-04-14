@@ -68,7 +68,12 @@ private:
     static constexpr int MAX_PWM = 255;
     static constexpr int STALL_COUNTS = 20;
     static constexpr int STALL_TIMEOUT_MS = 2000;
-    static constexpr int SLOW_ZONE_DIV = 8;
+    static constexpr int SLOW_ZONE_DIV = 12;
+    static constexpr int FINAL_APPROACH_DIV = 48;
+    static constexpr int FINAL_TOLERANCE_COUNTS = 2;
+    static constexpr int FINAL_PWM = MIN_PWM;
+    static constexpr int PRECISION_PWM_CAP = 160;
+    static constexpr uint32_t BRAKE_PULSE_MS = 8;
     static constexpr int LOAD_BOOST_STEP = 5;
     static constexpr int LOAD_BOOST_DECAY = 1;
     static constexpr int LOAD_BOOST_MAX = MAX_PWM;
@@ -77,6 +82,7 @@ private:
     static constexpr uint32_t COMMAND_QUEUE_LENGTH = 6;
 
     void setDirection(bool reverse);
+    void setBrake();
     long getPositionCounts() const;
     void runTask();
     void executeCommand(const MotionCommand& command);

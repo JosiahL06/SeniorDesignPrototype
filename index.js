@@ -42,10 +42,11 @@ const MAX_AUTO_RECONNECT_ATTEMPTS = 10;
 let motorConfig = {
     degrees: 75, // Degrees to rotate (5-180)
     speed: 20, // Motor speed percentage (5-100)
-    inSteps: false, // Whether to do rotation in 5 degree steps and wait for user prompt between steps
+    positionReset: false, // Whether to return motors to the website-tracked 0 degree position
     reverse: false // Whether to reverse motor direction
 };
 let totalRotation = 0; // Track total rotation for motor test
+let activeMotorCommandLabel = "Motor Test";
 
 // Bluetooth test configuration
 let bluetoothConfig = {
@@ -61,11 +62,11 @@ let intervalDeltasUs = [];
 
 let latestPosition1Counts = null;
 let latestPosition2Counts = null;
+let trackedPosition1Counts = null;
+let trackedPosition2Counts = null;
 
-let position1OffsetCounts = 0;
-let position2OffsetCounts = 0;
-let pendingPosition1Rebase = false;
-let pendingPosition2Rebase = false;
+const COUNTER_RESET_NEAR_ZERO_COUNTS = 20;
+const COUNTER_RESET_JUMP_THRESHOLD_COUNTS = 100;
 
 // Sequence-matched link metrics from data echo packets
 const pendingPackets = new Map();
@@ -367,10 +368,20 @@ async function startMotorTest() {
         return;
     }
 
-    // Firmware may reset position counters when a new motor test starts.
-    // Mark both channels so the next reset-to-near-zero sample is rebased.
-    pendingPosition1Rebase = true;
-    pendingPosition2Rebase = true;
+    if (motorConfig.positionReset) {
+        const sent = await sendPositionResetCommand();
+        if (!sent) {
+            return;
+        }
+
+        activeMotorCommandLabel = "Position Reset";
+        motorTestRunning = true;
+        updateUI();
+        logCommand("Position Reset started, waiting for ACK");
+        return;
+    }
+
+    activeMotorCommandLabel = "Motor Test";
 
     await sendCommandPacket(START_MOTOR);
     motorTestRunning = true;
@@ -425,7 +436,76 @@ async function stopTests() {
     logCommand("Stopped all tests");
 }
 
-async function sendCommandPacket(commandId) {
+function getCurrentPositionCounts(pairNumber) {
+    if (pairNumber === 1) {
+        if (trackedPosition1Counts === null) {
+            return null;
+        }
+
+        return trackedPosition1Counts;
+    }
+
+    if (pairNumber === 2) {
+        if (trackedPosition2Counts === null) {
+            return null;
+        }
+
+        return trackedPosition2Counts;
+    }
+
+    return null;
+}
+
+function getResetTargetPositionCounts() {
+    const position1Counts = getCurrentPositionCounts(1);
+    const position2Counts = getCurrentPositionCounts(2);
+
+    if (position1Counts === null && position2Counts === null) {
+        return null;
+    }
+
+    if (position1Counts === null) {
+        return position2Counts;
+    }
+
+    if (position2Counts === null) {
+        return position1Counts;
+    }
+
+    // Use the stronger signal so one stale/zeroed channel does not halve reset.
+    return Math.abs(position1Counts) >= Math.abs(position2Counts)
+        ? position1Counts
+        : position2Counts;
+}
+
+async function sendPositionResetCommand() {
+    const currentCounts = getResetTargetPositionCounts();
+    if (currentCounts === null) {
+        alert("No position data available yet");
+        logCommand("Failed to start position reset - no position data available yet");
+        return false;
+    }
+
+    const currentDegrees = countsToDegrees(currentCounts);
+    const motorDegrees = Math.round(Math.abs(currentDegrees));
+
+    if (motorDegrees === 0) {
+        logCommand("Position reset skipped - motors are already at 0°");
+        return false;
+    }
+
+    logCommand(`Position reset target: ${formatDegrees(currentDegrees)}`);
+
+    await sendCommandPacket(START_MOTOR, {
+        motorDegrees: motorDegrees,
+        motorReverse: currentDegrees > 0,
+        commandLabel: "Position Reset"
+    });
+
+    return true;
+}
+
+async function sendCommandPacket(commandId, options = {}) {
     if (!connected) {
         alert("Not connected");
         return;
@@ -434,16 +514,20 @@ async function sendCommandPacket(commandId) {
     let inSteps = 0;
     let reverse = 0;
     let payload16 = 0;
+    let commandLabel = null;
 
     const isMotorCmd = (commandId === 0b00 || commandId === 0b01);
     const isBtCmd = (commandId === 0b10 || commandId === 0b11);
 
     if (isMotorCmd) {
-        inSteps = motorConfig.inSteps ? 1 : 0;
-        reverse = motorConfig.reverse ? 1 : 0;
+        inSteps = 0;
+        reverse = options.motorReverse !== undefined ? (options.motorReverse ? 1 : 0) : (motorConfig.reverse ? 1 : 0);
+        commandLabel = options.commandLabel || (commandId === START_MOTOR ? "Start Motor" : "Stop Motor");
+
+        const motorDegrees = options.motorDegrees !== undefined ? options.motorDegrees : motorConfig.degrees;
 
         payload16 =
-            ((motorConfig.degrees & 0xff) << 8) |
+            ((motorDegrees & 0xff) << 8) |
             (motorConfig.speed & 0xff);
     } else if (isBtCmd) {
         inSteps = bluetoothConfig.inSteps ? 1 : 0;
@@ -469,8 +553,9 @@ async function sendCommandPacket(commandId) {
     cmdChar.writeValue(buffer);
 
     if (isMotorCmd) {
-        logCommand(`Sent command: ${commandId === START_MOTOR ? "Start Motor" : "Stop Motor"}, ` +
-            `degrees=${motorConfig.degrees}, speed=${motorConfig.speed}%, ` +
+        const motorDegrees = options.motorDegrees !== undefined ? options.motorDegrees : motorConfig.degrees;
+        logCommand(`Sent command: ${commandLabel}, ` +
+            `degrees=${motorDegrees}, speed=${motorConfig.speed}%, ` +
             `inSteps=${inSteps}, reverse=${reverse}`);
     } else if (isBtCmd) {
         logCommand(`Sent command: ${commandId === START_BT ? "Start Bluetooth Test" : "Stop Bluetooth Test"}, ` +
@@ -655,18 +740,25 @@ function handlePosition1Notification(event) {
     const view = new DataView(dv.buffer, dv.byteOffset, dv.byteLength);
     const positionCounts = view.getInt32(0, true);
 
-    if (
-        pendingPosition1Rebase &&
-        latestPosition1Counts !== null &&
-        Math.abs(positionCounts) <= 20 &&
-        Math.abs(latestPosition1Counts - positionCounts) >= 100
-    ) {
-        position1OffsetCounts += latestPosition1Counts;
-        pendingPosition1Rebase = false;
+    if (trackedPosition1Counts === null || latestPosition1Counts === null) {
+        trackedPosition1Counts = positionCounts;
+    } else {
+        const deltaCounts = positionCounts - latestPosition1Counts;
+
+        const looksLikeCounterReset =
+            Math.abs(positionCounts) <= COUNTER_RESET_NEAR_ZERO_COUNTS &&
+            Math.abs(deltaCounts) >= COUNTER_RESET_JUMP_THRESHOLD_COUNTS;
+
+        if (!looksLikeCounterReset) {
+            trackedPosition1Counts += deltaCounts;
+        }
     }
 
     latestPosition1Counts = positionCounts;
-    updatePositionDisplay(1, positionCounts + position1OffsetCounts);
+
+    if (trackedPosition1Counts !== null) {
+        updatePositionDisplay(1, trackedPosition1Counts);
+    }
 }
 
 function handlePosition2Notification(event) {
@@ -676,18 +768,25 @@ function handlePosition2Notification(event) {
     const view = new DataView(dv.buffer, dv.byteOffset, dv.byteLength);
     const positionCounts = view.getInt32(0, true);
 
-    if (
-        pendingPosition2Rebase &&
-        latestPosition2Counts !== null &&
-        Math.abs(positionCounts) <= 20 &&
-        Math.abs(latestPosition2Counts - positionCounts) >= 100
-    ) {
-        position2OffsetCounts += latestPosition2Counts;
-        pendingPosition2Rebase = false;
+    if (trackedPosition2Counts === null || latestPosition2Counts === null) {
+        trackedPosition2Counts = positionCounts;
+    } else {
+        const deltaCounts = positionCounts - latestPosition2Counts;
+
+        const looksLikeCounterReset =
+            Math.abs(positionCounts) <= COUNTER_RESET_NEAR_ZERO_COUNTS &&
+            Math.abs(deltaCounts) >= COUNTER_RESET_JUMP_THRESHOLD_COUNTS;
+
+        if (!looksLikeCounterReset) {
+            trackedPosition2Counts += deltaCounts;
+        }
     }
 
     latestPosition2Counts = positionCounts;
-    updatePositionDisplay(2, positionCounts + position2OffsetCounts);
+
+    if (trackedPosition2Counts !== null) {
+        updatePositionDisplay(2, trackedPosition2Counts);
+    }
 }
 
 function updatePositionDisplay(pairNumber, positionCounts) {
@@ -705,7 +804,7 @@ function countsToDegrees(positionCounts) {
     const degrees = (positionCounts / COUNTS_PER_REVOLUTION) * 360;
     const wrappedDegrees = degrees % 360;
 
-    // Avoid showing "-0.0°" after modulo operations.
+    // Wrap to one turn while preserving sign so CW/CCW cancel correctly.
     return Object.is(wrappedDegrees, -0) ? 0 : wrappedDegrees;
 }
 
@@ -716,10 +815,8 @@ function formatDegrees(degrees) {
 function resetPositionDisplay() {
     latestPosition1Counts = null;
     latestPosition2Counts = null;
-    position1OffsetCounts = 0;
-    position2OffsetCounts = 0;
-    pendingPosition1Rebase = false;
-    pendingPosition2Rebase = false;
+    trackedPosition1Counts = null;
+    trackedPosition2Counts = null;
     document.getElementById("position1-angle").textContent = "--.-°";
     document.getElementById("position1-counts").textContent = "Waiting for BLE position data";
     document.getElementById("position2-angle").textContent = "--.-°";
@@ -746,9 +843,9 @@ function handleAckNotification(event) {
         updateUI();
 
         if (status === ACK_SUCCESS) {
-            logCommand("Motor test completed");
+            logCommand(`${activeMotorCommandLabel} completed`);
         } else {
-            logCommand("Motor test ended with error ACK");
+            logCommand(`${activeMotorCommandLabel} ended with error ACK`);
         }
     }
 
@@ -828,7 +925,7 @@ function bindUIEvents() {
     const stopBtn = document.getElementById("stop-btn");
     const motorAngleSlider = document.getElementById("motor-angle-slider");
     const motorSpeedSlider = document.getElementById("motor-speed-slider");
-    const motorStepsCheckbox = document.getElementById("motor-steps-checkbox");
+    const positionResetCheckbox = document.getElementById("position-reset-checkbox");
     const motorReverseCheckbox = document.getElementById("motor-reverse-checkbox");
     const btIntervalSlider = document.getElementById("bt-interval-slider");
     const btStepsCheckbox = document.getElementById("bt-steps-checkbox");
@@ -858,8 +955,8 @@ function bindUIEvents() {
         document.getElementById("speedVal").textContent = event.target.value;
     });
 
-    motorStepsCheckbox.addEventListener("change", event => {
-        motorConfig.inSteps = event.target.checked;
+    positionResetCheckbox.addEventListener("change", event => {
+        motorConfig.positionReset = event.target.checked;
     });
 
     motorReverseCheckbox.addEventListener("change", event => {
