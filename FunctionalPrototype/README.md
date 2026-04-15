@@ -45,8 +45,6 @@ If any of these change, update both the sketch and this README.
 ## Circuit Diagram
 ![Functional Prototype Circuit Diagram](FunctionalPrototypeCircuitDiagram.jpg)
 
-> If the image does not render on GitHub, verify the file name and path exactly match (including case), for example `./CircuitDiagram.jpg`.
-
 ## Wiring Reference
 
 ### Motor Pair 1
