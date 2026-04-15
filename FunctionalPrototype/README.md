@@ -45,7 +45,7 @@ If any of these change, update both the sketch and this README.
 ## Circuit Diagram
 ![Functional Prototype Circuit Diagram](FunctionalPrototypeCircuitDiagram.jpg)
 
-## Wiring Reference
+## Wiring Reference (OF BUILT PROTOTYPE!!! As of 4/14, wiring below does not match circuit diagram above - ik its dumb, I'll fix soon - Josiah)
 
 ### Motor Pair 1
 
