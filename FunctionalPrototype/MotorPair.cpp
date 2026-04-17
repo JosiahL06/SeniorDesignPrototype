@@ -216,10 +216,6 @@ void MotorPair::executeCommand(const MotionCommand& command) {
         if (remainingAbs < _lastProgress) {
             _lastProgress = remainingAbs;
             _lastProgressMs = millis();
-        } else if (millis() - _lastProgressMs > STALL_TIMEOUT_MS) {
-            stopHardware();
-            _state = State::STALLED;
-            return;
         }
 
         if (sampleDelta <= 0 && remaining > slowZone) {

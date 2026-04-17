@@ -20,6 +20,7 @@ let unlocked = false;
 let statusEl = document.getElementById("status");
 let motorTestRunning = false;
 let bluetoothTestRunning = false;
+let currentViewTab = "testing";
 
 // Connection state
 let device = null;
@@ -47,6 +48,10 @@ let motorConfig = {
 };
 let totalRotation = 0; // Track total rotation for motor test
 let activeMotorCommandLabel = "Motor Test";
+let userViewDegreesPerStep = 5;
+let userViewCommandedTotalDeg = 0;
+const USER_VIEW_MAX_TOTAL_DEG = 60;
+let userViewMotorCommandPending = false;
 
 // Bluetooth test configuration
 let bluetoothConfig = {
@@ -154,6 +159,54 @@ function updateUI() {
         statusEl.textContent = "Connected";
         statusEl.className = "status connected";
     }
+
+    const testingTabBtn = document.getElementById("testing-view-tab-btn");
+    const userTabBtn = document.getElementById("user-view-tab-btn");
+    const testingView = document.getElementById("testing-view");
+    const userView = document.getElementById("user-view");
+
+    const showTestingTab = currentViewTab === "testing";
+    testingTabBtn.classList.toggle("active", showTestingTab);
+    userTabBtn.classList.toggle("active", !showTestingTab);
+    testingView.classList.toggle("hidden", !showTestingTab);
+    userView.classList.toggle("hidden", showTestingTab);
+
+    updateUserViewControls();
+}
+
+function updateUserViewControls() {
+    const userStepSelect = document.getElementById("user-step-select");
+    const userStartBtn = document.getElementById("user-start-btn");
+    const userFeedback = document.getElementById("user-feedback");
+    const progressEl = document.getElementById("user-rotation-progress");
+
+    const remainingDeg = USER_VIEW_MAX_TOTAL_DEG - userViewCommandedTotalDeg;
+    const canRun = connected && !userViewMotorCommandPending && remainingDeg >= userViewDegreesPerStep;
+
+    progressEl.textContent = `Total commanded: ${userViewCommandedTotalDeg}° / ${USER_VIEW_MAX_TOTAL_DEG}°`;
+    userStepSelect.disabled = !connected || userViewMotorCommandPending;
+    userStartBtn.disabled = !canRun;
+
+    if (!connected) {
+        userFeedback.textContent = "Connect to enable User View actuation.";
+        userFeedback.className = "status disconnected";
+        return;
+    }
+
+    if (remainingDeg < userViewDegreesPerStep) {
+        userFeedback.textContent = "Rotation cap reached for this session.";
+        userFeedback.className = "status disconnected";
+        return;
+    }
+
+    if (userViewMotorCommandPending) {
+        userFeedback.textContent = "Actuation in progress...";
+        userFeedback.className = "status connected";
+        return;
+    }
+
+    userFeedback.textContent = `Ready: next actuation ${userViewDegreesPerStep}° at 5% speed.`;
+    userFeedback.className = "status connected";
 }
 
 function unlock() {
@@ -312,6 +365,8 @@ function handleGattDisconnected() {
     position2Char = null;
     motorTestRunning = false;
     bluetoothTestRunning = false;
+    userViewCommandedTotalDeg = 0;
+    userViewMotorCommandPending = false;
     resetPositionDisplay();
 
     if (manualDisconnectRequested) {
@@ -349,6 +404,8 @@ function disconnectBLE() {
     position2Char = null;
     motorTestRunning = false;
     bluetoothTestRunning = false;
+    userViewCommandedTotalDeg = 0;
+    userViewMotorCommandPending = false;
     resetPositionDisplay();
 
     document.getElementById("connect-btn").classList.remove("connecting");
@@ -387,6 +444,47 @@ async function startMotorTest() {
     motorTestRunning = true;
     updateUI();
     logCommand("Motor test started, waiting for ACK");
+}
+
+async function startUserViewActuation() {
+    if (!connected) {
+        alert("Not connected");
+        return;
+    }
+
+    if (userViewMotorCommandPending) {
+        return;
+    }
+
+    const nextTotal = userViewCommandedTotalDeg + userViewDegreesPerStep;
+    if (nextTotal > USER_VIEW_MAX_TOTAL_DEG) {
+        logCommand("Blocked User View command - would exceed 60° session cap");
+        updateUserViewControls();
+        return;
+    }
+
+    userViewMotorCommandPending = true;
+    activeMotorCommandLabel = "User View Actuation";
+    motorTestRunning = true;
+    updateUI();
+
+    const sent = await sendCommandPacket(START_MOTOR, {
+        motorDegrees: userViewDegreesPerStep,
+        motorSpeed: 5,
+        motorReverse: false,
+        commandLabel: "User View Start Motor"
+    });
+
+    if (!sent) {
+        userViewMotorCommandPending = false;
+        motorTestRunning = false;
+        updateUI();
+        return;
+    }
+
+    userViewCommandedTotalDeg = nextTotal;
+    logCommand(`User View actuation started: degrees=${userViewDegreesPerStep}, speed=5%, reverse=0`);
+    updateUI();
 }
 
 async function startBluetoothTest() {
@@ -508,7 +606,7 @@ async function sendPositionResetCommand() {
 async function sendCommandPacket(commandId, options = {}) {
     if (!connected) {
         alert("Not connected");
-        return;
+        return false;
     }
 
     let inSteps = 0;
@@ -525,17 +623,18 @@ async function sendCommandPacket(commandId, options = {}) {
         commandLabel = options.commandLabel || (commandId === START_MOTOR ? "Start Motor" : "Stop Motor");
 
         const motorDegrees = options.motorDegrees !== undefined ? options.motorDegrees : motorConfig.degrees;
+        const motorSpeed = options.motorSpeed !== undefined ? options.motorSpeed : motorConfig.speed;
 
         payload16 =
             ((motorDegrees & 0xff) << 8) |
-            (motorConfig.speed & 0xff);
+            (motorSpeed & 0xff);
     } else if (isBtCmd) {
         inSteps = bluetoothConfig.inSteps ? 1 : 0;
         reverse = 0;
         payload16 = bluetoothConfig.sendIntervalMs & 0xffff;
     } else {
         console.error("Invalid command ID:", commandId);
-        return;
+        return false;
     }
 
     const packet =
@@ -554,8 +653,9 @@ async function sendCommandPacket(commandId, options = {}) {
 
     if (isMotorCmd) {
         const motorDegrees = options.motorDegrees !== undefined ? options.motorDegrees : motorConfig.degrees;
+        const motorSpeed = options.motorSpeed !== undefined ? options.motorSpeed : motorConfig.speed;
         logCommand(`Sent command: ${commandLabel}, ` +
-            `degrees=${motorDegrees}, speed=${motorConfig.speed}%, ` +
+            `degrees=${motorDegrees}, speed=${motorSpeed}%, ` +
             `inSteps=${inSteps}, reverse=${reverse}`);
     } else if (isBtCmd) {
         logCommand(`Sent command: ${commandId === START_BT ? "Start Bluetooth Test" : "Stop Bluetooth Test"}, ` +
@@ -563,6 +663,8 @@ async function sendCommandPacket(commandId, options = {}) {
     } else {
         logCommand(`Sent unknown command ${commandId}`);
     }
+
+    return true;
 }
 
 async function sendDataPacket() {
@@ -792,12 +894,17 @@ function handlePosition2Notification(event) {
 function updatePositionDisplay(pairNumber, positionCounts) {
     const angleEl = document.getElementById(`position${pairNumber}-angle`);
     const countsEl = document.getElementById(`position${pairNumber}-counts`);
+    const userAngleEl = document.getElementById(`user-position${pairNumber}-angle`);
+    const userCountsEl = document.getElementById(`user-position${pairNumber}-counts`);
 
     const degrees = countsToDegrees(positionCounts);
     const signedDegrees = formatDegrees(degrees);
 
     angleEl.textContent = signedDegrees;
     countsEl.textContent = `Relative to the horizontal`;
+
+    userAngleEl.textContent = signedDegrees;
+    userCountsEl.textContent = `Relative to the horizontal`;
 }
 
 function countsToDegrees(positionCounts) {
@@ -821,6 +928,10 @@ function resetPositionDisplay() {
     document.getElementById("position1-counts").textContent = "Waiting for BLE position data";
     document.getElementById("position2-angle").textContent = "--.-°";
     document.getElementById("position2-counts").textContent = "Waiting for BLE position data";
+    document.getElementById("user-position1-angle").textContent = "--.-°";
+    document.getElementById("user-position1-counts").textContent = "Waiting for BLE position data";
+    document.getElementById("user-position2-angle").textContent = "--.-°";
+    document.getElementById("user-position2-counts").textContent = "Waiting for BLE position data";
 }
 
 function handleAckNotification(event) {
@@ -840,6 +951,7 @@ function handleAckNotification(event) {
 
     if (commandId === START_MOTOR) {
         motorTestRunning = false;
+        userViewMotorCommandPending = false;
         updateUI();
 
         if (status === ACK_SUCCESS) {
@@ -931,6 +1043,10 @@ function bindUIEvents() {
     const btStepsCheckbox = document.getElementById("bt-steps-checkbox");
     const downloadCommandLogBtn = document.getElementById("download-command-log-btn");
     const downloadDataLogBtn = document.getElementById("download-data-log-btn");
+    const testingViewTabBtn = document.getElementById("testing-view-tab-btn");
+    const userViewTabBtn = document.getElementById("user-view-tab-btn");
+    const userStepSelect = document.getElementById("user-step-select");
+    const userStartBtn = document.getElementById("user-start-btn");
 
     passwordInput.addEventListener("keydown", event => {
         if (event.key === "Enter") {
@@ -979,6 +1095,23 @@ function bindUIEvents() {
     downloadDataLogBtn.addEventListener("click", () => {
         downloadLog(document.getElementById("data-log"));
     });
+
+    testingViewTabBtn.addEventListener("click", () => {
+        currentViewTab = "testing";
+        updateUI();
+    });
+
+    userViewTabBtn.addEventListener("click", () => {
+        currentViewTab = "user";
+        updateUI();
+    });
+
+    userStepSelect.addEventListener("change", event => {
+        userViewDegreesPerStep = Number(event.target.value);
+        updateUserViewControls();
+    });
+
+    userStartBtn.addEventListener("click", startUserViewActuation);
 }
 
 bindUIEvents();
