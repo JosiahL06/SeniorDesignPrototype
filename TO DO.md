@@ -22,8 +22,8 @@ Add Graph frame
 
 ## Motor Functions
 
-- 
+- Change logic to move motors to absolute positon rather than relative (possibly by using encoder counts to track position from startup)
 
 ## BLE Functions
 
-- 
+- Fix motor command ACK to send only when motors are finished moving, rather than immediately when command is received
