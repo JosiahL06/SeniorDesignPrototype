@@ -12,8 +12,7 @@ Open the control panel here:
 
 - Bluetooth-capable device, such as a laptop, desktop, or phone
 - Browser with Web Bluetooth support, such as Chrome, Edge, or another Chromium-based browser
-- The Arduino / ESP32 device powered on and nearby, typically within about 5 to 15 meters
-- Access to the connection password, which is shared in Teams chat
+- The Arduino powered on and nearby, typically within about 5 to 15 meters
 
 ## Device Configuration Assumptions
 
