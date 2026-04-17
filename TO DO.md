@@ -15,6 +15,7 @@ Simplify User/Clinician View tab
 - Display position data graphically, plotted over time in reference to target goal
 
 Add Graph frame
+- Graph position data over time, with target goal as reference line
 
 ## Arduino Control Code
 
