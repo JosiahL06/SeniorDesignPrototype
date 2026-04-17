@@ -14,6 +14,8 @@ Simplify User/Clinician View tab
 - For setting degrees per step, user should select in terms of mm/cm instead
 - Display position data graphically, plotted over time in reference to target goal
 
+Add Graph frame
+
 ## Arduino Control Code
 
 - 
