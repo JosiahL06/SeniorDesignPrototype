@@ -18,7 +18,7 @@
       </div>
 
       <h2>Access Required</h2>
-      <p>Enter password to enable BLE connection</p>
+      <p>Enter password to enable device connection</p>
 
       <input type="password" id="password-input" placeholder="Password">
 
@@ -50,18 +50,6 @@
 
         <div id="testing-view" class="tab-content active">
           <div class="button-row">
-            <button id="motor-test-btn" class="test-btn secondary hidden" data-test="motor"
-              data-idle-label="Start Motor Test" data-running-label="Motor Test Running">
-              Start Motor Test
-            </button>
-
-            <button id="bluetooth-test-btn" class="test-btn secondary hidden" data-test="bluetooth"
-              data-idle-label="Start Bluetooth Test" data-running-label="Bluetooth Test Running">
-              Start Bluetooth Test
-            </button>
-          </div>
-
-          <div class="button-row">
             <button id="stop-btn" class="stop-cmd-btn">STOP TESTS</button>
           </div>
 
@@ -77,6 +65,18 @@
               <div id="position2-angle" class="value">--.-°</div>
               <div id="position2-counts" class="subvalue">Waiting for position data</div>
             </div>
+          </div>
+
+          <div class="button-row">
+            <button id="motor-test-btn" class="test-btn secondary hidden" data-test="motor"
+              data-idle-label="Start Motor Test" data-running-label="Motor Test Running">
+              Start Motor Test
+            </button>
+
+            <button id="bluetooth-test-btn" class="test-btn secondary hidden" data-test="bluetooth"
+              data-idle-label="Start Bluetooth Test" data-running-label="Bluetooth Test Running">
+              Start Bluetooth Test
+            </button>
           </div>
 
           <details class="config-box hidden">
@@ -128,45 +128,63 @@
             </div>
           </details>
 
-          <div class="log">
-            <div class="log-title">Command Log</div>
-            <ul id="command-log"></ul>
-            <button id="download-command-log-btn">Download Command Log</button>
-
-            <div class="log-title">Data Log</div>
-            <ul id="data-log"></ul>
-            <button id="download-data-log-btn">Download Data Log</button>
-          </div>
         </div>
 
         <div id="user-view" class="tab-content hidden">
           <div class="position-grid">
             <div class="position-card">
               <div class="label">Left Wing</div>
-              <div id="user-position1-angle" class="value">--.-°</div>
+              <div id="user-position1-angle" class="value">--.- mm</div>
               <div id="user-position1-counts" class="subvalue">Waiting for position data</div>
             </div>
 
             <div class="position-card">
               <div class="label">Right Wing</div>
-              <div id="user-position2-angle" class="value">--.-°</div>
+              <div id="user-position2-angle" class="value">--.- mm</div>
               <div id="user-position2-counts" class="subvalue">Waiting for position data</div>
             </div>
           </div>
 
           <div class="user-controls">
-            <label for="user-step-select">Degrees per step</label>
-            <select id="user-step-select">
-              <option value="5" selected>5°</option>
-              <option value="10">10°</option>
-            </select>
+            <label for="user-step-mm-input">Lift distance per actuation (mm)</label>
+            <input id="user-step-mm-input" type="number" min="1" max="40" step="1" value="5">
+            <div id="user-step-cm-hint" class="subvalue">0.50 cm per actuation</div>
 
-            <div id="user-rotation-progress" class="subvalue">Total commanded: 0° / 60°</div>
+            <label for="user-target-mm-input">Target lift for this session (mm)</label>
+            <input id="user-target-mm-input" type="number" min="5" max="120" step="1" value="30">
+            <div id="user-target-cm-hint" class="subvalue">3.00 cm target</div>
+
+            <div id="user-rotation-progress" class="subvalue">Total commanded: 0.0 mm / 30.0 mm</div>
 
             <button id="user-start-btn" class="secondary" type="button">Start Next Actuation</button>
             <div id="user-feedback" class="status"></div>
           </div>
         </div>
+
+        <div class="graph-frame">
+          <div class="graph-header">
+            <div>
+              <div class="graph-title">Lift Position Trend</div>
+              <div id="graph-target-label" class="subvalue">Target: 30.0 mm</div>
+            </div>
+            <div class="graph-legend">
+              <span class="legend-chip left">Left Wing</span>
+              <span class="legend-chip right">Right Wing</span>
+              <span class="legend-chip target">Target</span>
+            </div>
+          </div>
+          <canvas id="position-graph" aria-label="Position trend graph" role="img"></canvas>
+        </div>
+      </div>
+
+      <div class="frame logs-frame">
+        <div class="log-title">Command Log</div>
+        <ul id="command-log"></ul>
+        <button id="download-command-log-btn" class="secondary">Download Command Log</button>
+
+        <div class="log-title">Data Log</div>
+        <ul id="data-log"></ul>
+        <button id="download-data-log-btn" class="secondary">Download Data Log</button>
       </div>
     </div>
   </div>

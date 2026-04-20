@@ -10,6 +10,7 @@ const POSITION2_CHAR_UUID = "4f5cc7fd-1f5c-4aab-82fb-0d6f3dbe7b2b";
 const ACCESS_PASSWORD = "Pocki06";
 
 const COUNTS_PER_REVOLUTION = 1727 * 2;
+const LIFT_MM_PER_REVOLUTION = 8;
 
 // ACK status codes
 const ACK_SUCCESS = 0x00;
@@ -48,9 +49,9 @@ let motorConfig = {
 };
 let totalRotation = 0; // Track total rotation for motor test
 let activeMotorCommandLabel = "Motor Test";
-let userViewDegreesPerStep = 5;
-let userViewCommandedTotalDeg = 0;
-const USER_VIEW_MAX_TOTAL_DEG = 60;
+let userViewStepMm = 5;
+let userViewTargetMm = 30;
+let userViewCommandedTotalMm = 0;
 let userViewMotorCommandPending = false;
 
 // Bluetooth test configuration
@@ -69,6 +70,10 @@ let latestPosition1Counts = null;
 let latestPosition2Counts = null;
 let trackedPosition1Counts = null;
 let trackedPosition2Counts = null;
+
+const GRAPH_WINDOW_MS = 120000;
+let graphHistory = [];
+let graphAnimationFrameId = null;
 
 const COUNTER_RESET_NEAR_ZERO_COUNTS = 20;
 const COUNTER_RESET_JUMP_THRESHOLD_COUNTS = 100;
@@ -175,16 +180,27 @@ function updateUI() {
 }
 
 function updateUserViewControls() {
-    const userStepSelect = document.getElementById("user-step-select");
+    const userStepInput = document.getElementById("user-step-mm-input");
+    const userStepHint = document.getElementById("user-step-cm-hint");
+    const userTargetInput = document.getElementById("user-target-mm-input");
+    const userTargetHint = document.getElementById("user-target-cm-hint");
     const userStartBtn = document.getElementById("user-start-btn");
     const userFeedback = document.getElementById("user-feedback");
     const progressEl = document.getElementById("user-rotation-progress");
+    const graphTargetLabel = document.getElementById("graph-target-label");
 
-    const remainingDeg = USER_VIEW_MAX_TOTAL_DEG - userViewCommandedTotalDeg;
-    const canRun = connected && !userViewMotorCommandPending && remainingDeg >= userViewDegreesPerStep;
+    const remainingMm = Math.max(0, userViewTargetMm - userViewCommandedTotalMm);
+    const canRun = connected && !userViewMotorCommandPending && remainingMm >= userViewStepMm;
 
-    progressEl.textContent = `Total commanded: ${userViewCommandedTotalDeg}° / ${USER_VIEW_MAX_TOTAL_DEG}°`;
-    userStepSelect.disabled = !connected || userViewMotorCommandPending;
+    progressEl.textContent = `Total commanded: ${userViewCommandedTotalMm.toFixed(1)} mm / ${userViewTargetMm.toFixed(1)} mm`;
+    userStepHint.textContent = `${mmToCm(userViewStepMm).toFixed(2)} cm per actuation`;
+    userTargetHint.textContent = `${mmToCm(userViewTargetMm).toFixed(2)} cm target`;
+    graphTargetLabel.textContent = `Target: ${userViewTargetMm.toFixed(1)} mm`;
+
+    userStepInput.value = String(userViewStepMm);
+    userTargetInput.value = String(userViewTargetMm);
+    userStepInput.disabled = !connected || userViewMotorCommandPending;
+    userTargetInput.disabled = !connected || userViewMotorCommandPending;
     userStartBtn.disabled = !canRun;
 
     if (!connected) {
@@ -193,8 +209,8 @@ function updateUserViewControls() {
         return;
     }
 
-    if (remainingDeg < userViewDegreesPerStep) {
-        userFeedback.textContent = "Rotation cap reached for this session.";
+    if (remainingMm < userViewStepMm) {
+        userFeedback.textContent = "Lift target reached for this session.";
         userFeedback.className = "status disconnected";
         return;
     }
@@ -205,7 +221,7 @@ function updateUserViewControls() {
         return;
     }
 
-    userFeedback.textContent = `Ready: next actuation ${userViewDegreesPerStep}° at 5% speed.`;
+    userFeedback.textContent = `Ready: next actuation ${userViewStepMm.toFixed(1)} mm at 5% speed.`;
     userFeedback.className = "status connected";
 }
 
@@ -365,7 +381,7 @@ function handleGattDisconnected() {
     position2Char = null;
     motorTestRunning = false;
     bluetoothTestRunning = false;
-    userViewCommandedTotalDeg = 0;
+    userViewCommandedTotalMm = 0;
     userViewMotorCommandPending = false;
     resetPositionDisplay();
 
@@ -404,7 +420,7 @@ function disconnectBLE() {
     position2Char = null;
     motorTestRunning = false;
     bluetoothTestRunning = false;
-    userViewCommandedTotalDeg = 0;
+    userViewCommandedTotalMm = 0;
     userViewMotorCommandPending = false;
     resetPositionDisplay();
 
@@ -456,9 +472,9 @@ async function startUserViewActuation() {
         return;
     }
 
-    const nextTotal = userViewCommandedTotalDeg + userViewDegreesPerStep;
-    if (nextTotal > USER_VIEW_MAX_TOTAL_DEG) {
-        logCommand("Blocked User View command - would exceed 60° session cap");
+    const nextTotalMm = userViewCommandedTotalMm + userViewStepMm;
+    if (nextTotalMm > userViewTargetMm) {
+        logCommand("Blocked User View command - would exceed user target lift distance");
         updateUserViewControls();
         return;
     }
@@ -468,8 +484,11 @@ async function startUserViewActuation() {
     motorTestRunning = true;
     updateUI();
 
+    const userStepDeg = mmToDegrees(userViewStepMm);
+    const motorDegrees = Math.max(1, Math.round(Math.abs(userStepDeg)));
+
     const sent = await sendCommandPacket(START_MOTOR, {
-        motorDegrees: userViewDegreesPerStep,
+        motorDegrees: motorDegrees,
         motorSpeed: 5,
         motorReverse: false,
         commandLabel: "User View Start Motor"
@@ -482,8 +501,8 @@ async function startUserViewActuation() {
         return;
     }
 
-    userViewCommandedTotalDeg = nextTotal;
-    logCommand(`User View actuation started: degrees=${userViewDegreesPerStep}, speed=5%, reverse=0`);
+    userViewCommandedTotalMm = nextTotalMm;
+    logCommand(`User View actuation started: lift=${userViewStepMm.toFixed(1)}mm, degrees=${motorDegrees}, speed=5%, reverse=0`);
     updateUI();
 }
 
@@ -898,13 +917,17 @@ function updatePositionDisplay(pairNumber, positionCounts) {
     const userCountsEl = document.getElementById(`user-position${pairNumber}-counts`);
 
     const degrees = countsToDegrees(positionCounts);
+    const distanceMm = countsToMillimeters(positionCounts);
     const signedDegrees = formatDegrees(degrees);
+    const signedDistance = formatDistance(distanceMm);
 
-    angleEl.textContent = signedDegrees;
-    countsEl.textContent = `Relative to the horizontal`;
+    angleEl.textContent = signedDistance;
+    countsEl.textContent = `${signedDegrees} relative to horizontal`;
 
-    userAngleEl.textContent = signedDegrees;
-    userCountsEl.textContent = `Relative to the horizontal`;
+    userAngleEl.textContent = signedDistance;
+    userCountsEl.textContent = `${signedDegrees} relative to horizontal`;
+
+    recordGraphPoint(pairNumber, distanceMm);
 }
 
 function countsToDegrees(positionCounts) {
@@ -919,19 +942,171 @@ function formatDegrees(degrees) {
     return `${degrees >= 0 ? "+" : ""}${degrees.toFixed(1)}°`;
 }
 
+function countsToMillimeters(positionCounts) {
+    return (positionCounts / COUNTS_PER_REVOLUTION) * LIFT_MM_PER_REVOLUTION;
+}
+
+function mmToDegrees(mmValue) {
+    return (mmValue / LIFT_MM_PER_REVOLUTION) * 360;
+}
+
+function mmToCm(mmValue) {
+    return mmValue / 10;
+}
+
+function formatDistance(mmValue) {
+    const absMm = Math.abs(mmValue);
+    const sign = mmValue >= 0 ? "+" : "-";
+    if (absMm >= 10) {
+        return `${sign}${mmToCm(absMm).toFixed(2)} cm`;
+    }
+
+    return `${sign}${absMm.toFixed(1)} mm`;
+}
+
 function resetPositionDisplay() {
     latestPosition1Counts = null;
     latestPosition2Counts = null;
     trackedPosition1Counts = null;
     trackedPosition2Counts = null;
-    document.getElementById("position1-angle").textContent = "--.-°";
+    graphHistory = [];
+    requestGraphDraw();
+    document.getElementById("position1-angle").textContent = "--.- mm";
     document.getElementById("position1-counts").textContent = "Waiting for BLE position data";
-    document.getElementById("position2-angle").textContent = "--.-°";
+    document.getElementById("position2-angle").textContent = "--.- mm";
     document.getElementById("position2-counts").textContent = "Waiting for BLE position data";
-    document.getElementById("user-position1-angle").textContent = "--.-°";
+    document.getElementById("user-position1-angle").textContent = "--.- mm";
     document.getElementById("user-position1-counts").textContent = "Waiting for BLE position data";
-    document.getElementById("user-position2-angle").textContent = "--.-°";
+    document.getElementById("user-position2-angle").textContent = "--.- mm";
     document.getElementById("user-position2-counts").textContent = "Waiting for BLE position data";
+}
+
+function recordGraphPoint(pairNumber, mmValue) {
+    graphHistory.push({
+        t: performance.now(),
+        pair: pairNumber,
+        mm: mmValue
+    });
+
+    trimGraphHistory();
+    requestGraphDraw();
+}
+
+function trimGraphHistory() {
+    const cutoff = performance.now() - GRAPH_WINDOW_MS;
+    graphHistory = graphHistory.filter(point => point.t >= cutoff);
+}
+
+function requestGraphDraw() {
+    if (graphAnimationFrameId !== null) {
+        return;
+    }
+
+    graphAnimationFrameId = requestAnimationFrame(() => {
+        graphAnimationFrameId = null;
+        drawPositionGraph();
+    });
+}
+
+function drawPositionGraph() {
+    const canvas = document.getElementById("position-graph");
+    if (!canvas) {
+        return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    const cssWidth = canvas.clientWidth;
+    const cssHeight = canvas.clientHeight;
+
+    if (!cssWidth || !cssHeight) {
+        return;
+    }
+
+    const dpr = window.devicePixelRatio || 1;
+    const targetWidth = Math.floor(cssWidth * dpr);
+    const targetHeight = Math.floor(cssHeight * dpr);
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    const padding = { top: 14, right: 12, bottom: 24, left: 44 };
+    const plotW = cssWidth - padding.left - padding.right;
+    const plotH = cssHeight - padding.top - padding.bottom;
+
+    if (plotW <= 0 || plotH <= 0) {
+        return;
+    }
+
+    const now = performance.now();
+    const windowStart = now - GRAPH_WINDOW_MS;
+    const visiblePoints = graphHistory.filter(point => point.t >= windowStart);
+    const mmValues = visiblePoints.map(point => point.mm);
+    mmValues.push(0, userViewTargetMm);
+
+    let minMm = Math.min(...mmValues);
+    let maxMm = Math.max(...mmValues);
+
+    if (Math.abs(maxMm - minMm) < 1) {
+        maxMm += 1;
+        minMm -= 1;
+    }
+
+    const padMm = Math.max(1, (maxMm - minMm) * 0.1);
+    maxMm += padMm;
+    minMm -= padMm;
+
+    const xOf = t => padding.left + ((t - windowStart) / GRAPH_WINDOW_MS) * plotW;
+    const yOf = mm => padding.top + ((maxMm - mm) / (maxMm - minMm)) * plotH;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(padding.left, padding.top, plotW, plotH);
+    ctx.strokeStyle = "#dbe3ef";
+    ctx.strokeRect(padding.left, padding.top, plotW, plotH);
+
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = "#f43f5e";
+    const targetY = yOf(userViewTargetMm);
+    ctx.beginPath();
+    ctx.moveTo(padding.left, targetY);
+    ctx.lineTo(padding.left + plotW, targetY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawGraphSeries(ctx, visiblePoints, 1, "#2563eb", xOf, yOf);
+    drawGraphSeries(ctx, visiblePoints, 2, "#059669", xOf, yOf);
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.fillText(`${minMm.toFixed(1)} mm`, 4, yOf(minMm) + 3);
+    ctx.fillText(`${maxMm.toFixed(1)} mm`, 4, yOf(maxMm) + 3);
+    ctx.fillText("120s", padding.left + plotW - 28, cssHeight - 6);
+    ctx.fillText("Now", padding.left + plotW - 20, padding.top - 2);
+}
+
+function drawGraphSeries(ctx, points, pairNumber, color, xOf, yOf) {
+    const series = points.filter(point => point.pair === pairNumber);
+    if (series.length < 2) {
+        return;
+    }
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    series.forEach((point, index) => {
+        const x = xOf(point.t);
+        const y = yOf(point.mm);
+        if (index === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    ctx.stroke();
 }
 
 function handleAckNotification(event) {
@@ -1045,7 +1220,8 @@ function bindUIEvents() {
     const downloadDataLogBtn = document.getElementById("download-data-log-btn");
     const testingViewTabBtn = document.getElementById("testing-view-tab-btn");
     const userViewTabBtn = document.getElementById("user-view-tab-btn");
-    const userStepSelect = document.getElementById("user-step-select");
+    const userStepMmInput = document.getElementById("user-step-mm-input");
+    const userTargetMmInput = document.getElementById("user-target-mm-input");
     const userStartBtn = document.getElementById("user-start-btn");
 
     passwordInput.addEventListener("keydown", event => {
@@ -1106,12 +1282,36 @@ function bindUIEvents() {
         updateUI();
     });
 
-    userStepSelect.addEventListener("change", event => {
-        userViewDegreesPerStep = Number(event.target.value);
+    userStepMmInput.addEventListener("input", event => {
+        const nextValue = Number(event.target.value);
+        if (Number.isNaN(nextValue)) {
+            return;
+        }
+
+        userViewStepMm = Math.min(40, Math.max(1, nextValue));
+        updateUserViewControls();
+    });
+
+    userTargetMmInput.addEventListener("input", event => {
+        const nextValue = Number(event.target.value);
+        if (Number.isNaN(nextValue)) {
+            return;
+        }
+
+        userViewTargetMm = Math.min(120, Math.max(5, nextValue));
+        if (userViewCommandedTotalMm > userViewTargetMm) {
+            userViewCommandedTotalMm = userViewTargetMm;
+        }
+
+        requestGraphDraw();
         updateUserViewControls();
     });
 
     userStartBtn.addEventListener("click", startUserViewActuation);
+
+    window.addEventListener("resize", requestGraphDraw);
 }
 
 bindUIEvents();
+updateUserViewControls();
+requestGraphDraw();

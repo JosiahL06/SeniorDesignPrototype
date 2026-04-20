@@ -23,7 +23,7 @@ body {
 }
 
 .container {
-    max-width: 1100px;
+    max-width: 1420px;
     margin: auto;
     padding: 12px;
 }
@@ -39,7 +39,7 @@ body {
 
 .control-layout {
     display: grid;
-    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(250px, 320px);
     gap: 16px;
     align-items: start;
 }
@@ -222,15 +222,16 @@ button.connected:hover {
 
 .config-box {
     margin-top: 16px;
-    border: 1px solid var(--border);
+    border: 1px dashed #d8dde6;
     border-radius: 10px;
-    padding: 8px 12px;
-    background: var(--bg);
+    padding: 8px 10px;
+    background: #fbfcfe;
 }
 
 .config-box summary {
-    font-size: 0.95rem;
-    font-weight: 600;
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: #64748b;
     cursor: pointer;
     list-style: none;
 }
@@ -255,7 +256,7 @@ button.connected:hover {
 
 .config-content label {
     display: block;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--muted);
     margin-top: 12px;
 }
@@ -269,6 +270,20 @@ button.connected:hover {
     padding-top: 12px;
     border-top: 1px solid var(--border);
     text-align: left;
+}
+
+.logs-frame {
+    max-height: calc(100vh - 54px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: sticky;
+    top: 18px;
+}
+
+.logs-frame button {
+    margin-bottom: 6px;
 }
 
 .position-card {
@@ -314,6 +329,10 @@ button.connected:hover {
     color: var(--muted);
 }
 
+.user-controls input[type="number"] {
+    margin: 8px 0 8px;
+}
+
 #user-rotation-progress {
     margin-bottom: 12px;
 }
@@ -339,6 +358,69 @@ button.connected:hover {
     margin-top: 0;
 }
 
+.graph-frame {
+    margin-top: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    background: #f9fbff;
+}
+
+.graph-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.graph-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.graph-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.legend-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.legend-chip.left {
+    color: #1d4ed8;
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+
+.legend-chip.right {
+    color: #065f46;
+    background: #d1fae5;
+    border-color: #86efac;
+}
+
+.legend-chip.target {
+    color: #9f1239;
+    background: #ffe4e6;
+    border-color: #fda4af;
+}
+
+#position-graph {
+    width: 100%;
+    height: 260px;
+    margin-top: 10px;
+    display: block;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid #dde4ef;
+}
+
 @media (max-width: 420px) {
     .position-grid {
         grid-template-columns: 1fr;
@@ -353,6 +435,27 @@ button.connected:hover {
     .left-frame {
         position: static;
     }
+
+    .logs-frame {
+        position: static;
+        max-height: none;
+    }
+
+    .graph-header {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 1200px) {
+    .control-layout {
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    }
+
+    .logs-frame {
+        grid-column: 1 / -1;
+        position: static;
+        max-height: 360px;
+    }
 }
 
 .log-title {
@@ -366,7 +469,7 @@ button.connected:hover {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 120px;
+    max-height: 190px;
     overflow-y: auto;
 }
 
@@ -381,7 +484,7 @@ button.connected:hover {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 120px;
+    max-height: 190px;
     overflow-y: auto;
 }
 
