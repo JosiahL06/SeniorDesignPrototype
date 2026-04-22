@@ -1,8 +1,5 @@
 // =============================
 // Functional Prototype Arduino Control Code
-// Last Updated: 4/8 by Josiah Laakkonen
-// TODO:
-//  - (optional?) Fine-tune encoder control of motor movement (slightly inaccurate at higher speed)
 // =============================
 
 #include "MotorPair.h"
