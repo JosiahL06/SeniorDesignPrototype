@@ -50,7 +50,7 @@ let motorConfig = {
 let totalRotation = 0; // Track total rotation for motor test
 let activeMotorCommandLabel = "Motor Test";
 let userViewStepMm = 5;
-let userViewTargetMm = 30;
+let userViewTargetMm = 15;
 let userViewCommandedTotalMm = 0;
 let userViewMotorCommandPending = false;
 
@@ -181,9 +181,9 @@ function updateUI() {
 
 function updateUserViewControls() {
     const userStepInput = document.getElementById("user-step-mm-input");
-    const userStepHint = document.getElementById("user-step-cm-hint");
+    const userStepHint = document.getElementById("user-step-mm-hint");
     const userTargetInput = document.getElementById("user-target-mm-input");
-    const userTargetHint = document.getElementById("user-target-cm-hint");
+    const userTargetHint = document.getElementById("user-target-mm-hint");
     const userStartBtn = document.getElementById("user-start-btn");
     const userFeedback = document.getElementById("user-feedback");
     const progressEl = document.getElementById("user-rotation-progress");
@@ -193,8 +193,8 @@ function updateUserViewControls() {
     const canRun = connected && !userViewMotorCommandPending && remainingMm >= userViewStepMm;
 
     progressEl.textContent = `Total commanded: ${userViewCommandedTotalMm.toFixed(1)} mm / ${userViewTargetMm.toFixed(1)} mm`;
-    userStepHint.textContent = `${mmToCm(userViewStepMm).toFixed(2)} cm per actuation`;
-    userTargetHint.textContent = `${mmToCm(userViewTargetMm).toFixed(2)} cm target`;
+    userStepHint.textContent = `${userViewStepMm.toFixed(1)} mm per actuation`;
+    userTargetHint.textContent = `${userViewTargetMm.toFixed(1)} mm target`;
     graphTargetLabel.textContent = `Target: ${userViewTargetMm.toFixed(1)} mm`;
 
     userStepInput.value = String(userViewStepMm);
@@ -880,6 +880,11 @@ function handlePosition1Notification(event) {
     if (trackedPosition1Counts !== null) {
         updatePositionDisplay(1, trackedPosition1Counts);
     }
+
+    const centralLiftMm = getCentralPlateLiftMm();
+    if (centralLiftMm !== null) {
+        recordGraphPoint(centralLiftMm);
+    }
 }
 
 function handlePosition2Notification(event) {
@@ -908,6 +913,11 @@ function handlePosition2Notification(event) {
     if (trackedPosition2Counts !== null) {
         updatePositionDisplay(2, trackedPosition2Counts);
     }
+
+    const centralLiftMm = getCentralPlateLiftMm();
+    if (centralLiftMm !== null) {
+        recordGraphPoint(centralLiftMm);
+    }
 }
 
 function updatePositionDisplay(pairNumber, positionCounts) {
@@ -924,10 +934,34 @@ function updatePositionDisplay(pairNumber, positionCounts) {
     angleEl.textContent = signedDistance;
     countsEl.textContent = `${signedDegrees} relative to horizontal`;
 
-    userAngleEl.textContent = signedDistance;
-    userCountsEl.textContent = `${signedDegrees} relative to horizontal`;
+    if (userAngleEl && userCountsEl) {
+        userAngleEl.textContent = signedDistance;
+        userCountsEl.textContent = `${signedDegrees} relative to horizontal`;
+    }
+}
 
-    recordGraphPoint(pairNumber, distanceMm);
+function getCentralPlateLiftMm() {
+    const leftMm = trackedPosition1Counts === null
+        ? null
+        : countsToMillimeters(trackedPosition1Counts);
+    const rightMm = trackedPosition2Counts === null
+        ? null
+        : countsToMillimeters(trackedPosition2Counts);
+
+    if (leftMm === null && rightMm === null) {
+        return null;
+    }
+
+    if (leftMm === null) {
+        return rightMm;
+    }
+
+    if (rightMm === null) {
+        return leftMm;
+    }
+
+    // Sternum plate lift is shared by both wings, so use their average.
+    return (leftMm + rightMm) / 2;
 }
 
 function countsToDegrees(positionCounts) {
@@ -950,18 +984,9 @@ function mmToDegrees(mmValue) {
     return (mmValue / LIFT_MM_PER_REVOLUTION) * 360;
 }
 
-function mmToCm(mmValue) {
-    return mmValue / 10;
-}
-
 function formatDistance(mmValue) {
-    const absMm = Math.abs(mmValue);
     const sign = mmValue >= 0 ? "+" : "-";
-    if (absMm >= 10) {
-        return `${sign}${mmToCm(absMm).toFixed(2)} cm`;
-    }
-
-    return `${sign}${absMm.toFixed(1)} mm`;
+    return `${sign}${Math.abs(mmValue).toFixed(1)} mm`;
 }
 
 function resetPositionDisplay() {
@@ -975,16 +1000,21 @@ function resetPositionDisplay() {
     document.getElementById("position1-counts").textContent = "Waiting for BLE position data";
     document.getElementById("position2-angle").textContent = "--.- mm";
     document.getElementById("position2-counts").textContent = "Waiting for BLE position data";
-    document.getElementById("user-position1-angle").textContent = "--.- mm";
-    document.getElementById("user-position1-counts").textContent = "Waiting for BLE position data";
-    document.getElementById("user-position2-angle").textContent = "--.- mm";
-    document.getElementById("user-position2-counts").textContent = "Waiting for BLE position data";
+
+    const userPosition1AngleEl = document.getElementById("user-position1-angle");
+    const userPosition1CountsEl = document.getElementById("user-position1-counts");
+    const userPosition2AngleEl = document.getElementById("user-position2-angle");
+    const userPosition2CountsEl = document.getElementById("user-position2-counts");
+
+    if (userPosition1AngleEl) userPosition1AngleEl.textContent = "--.- mm";
+    if (userPosition1CountsEl) userPosition1CountsEl.textContent = "Waiting for BLE position data";
+    if (userPosition2AngleEl) userPosition2AngleEl.textContent = "--.- mm";
+    if (userPosition2CountsEl) userPosition2CountsEl.textContent = "Waiting for BLE position data";
 }
 
-function recordGraphPoint(pairNumber, mmValue) {
+function recordGraphPoint(mmValue) {
     graphHistory.push({
         t: performance.now(),
-        pair: pairNumber,
         mm: mmValue
     });
 
@@ -1077,8 +1107,7 @@ function drawPositionGraph() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    drawGraphSeries(ctx, visiblePoints, 1, "#2563eb", xOf, yOf);
-    drawGraphSeries(ctx, visiblePoints, 2, "#059669", xOf, yOf);
+    drawGraphSeries(ctx, visiblePoints, "#2563eb", xOf, yOf);
 
     ctx.fillStyle = "#64748b";
     ctx.font = "11px system-ui, sans-serif";
@@ -1088,16 +1117,15 @@ function drawPositionGraph() {
     ctx.fillText("Now", padding.left + plotW - 20, padding.top - 2);
 }
 
-function drawGraphSeries(ctx, points, pairNumber, color, xOf, yOf) {
-    const series = points.filter(point => point.pair === pairNumber);
-    if (series.length < 2) {
+function drawGraphSeries(ctx, points, color, xOf, yOf) {
+    if (points.length < 2) {
         return;
     }
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    series.forEach((point, index) => {
+    points.forEach((point, index) => {
         const x = xOf(point.t);
         const y = yOf(point.mm);
         if (index === 0) {
