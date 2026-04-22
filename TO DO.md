@@ -2,29 +2,38 @@
 
 ## Website
 
-Fix formatting of test view frame:
-- Start test buttons should be moved below position data
-- Make configuration tabs less prominent?
+### Completed
 
-Move Logs to seperate frame
-- Maybe on the left column, or make third column for logs
+- [x] Start test buttons moved below position data in Testing View
+- [x] Configuration panels made less prominent (collapsible sections)
+- [x] Logs moved to a separate frame/column
+- [x] User View displays lift position in mm
+- [x] User View uses mm inputs for actuation step and target lift
+- [x] Position data is displayed graphically over time with a target reference line
+- [x] Added graph frame for lift trend tracking
 
-Simplify User/Clinician View tab
-- Show position data in mm/cm, as in distance sternum is lifted?
-- For setting degrees per step, user should select in terms of mm/cm instead
-- Display position data graphically, plotted over time in reference to target goal
+### Remaining
 
-Add Graph frame
-- Graph position data over time, with target goal as reference line (target goal is set by user in User/Clinician View tab)
+- [ ] Refine test-view layout styling as needed after user testing
 
 ## Arduino Control Code
 
-- 
+### Completed
+
+- [x] BLE command queueing and command handling in main loop
+- [x] Motor position BLE notifications for both motor pairs
+- [x] BLE metrics packet generation and notification during BT test mode
+- [x] Data echo handling for Bluetooth throughput/error-rate testing
+- [x] FreeRTOS-based asynchronous motor control task per motor pair
+
+### Remaining
+
+- [ ] Fine-tune encoder control accuracy at higher motor speeds
 
 ## Motor Functions
 
-- Change logic to move motors to absolute positon rather than relative (possibly by using encoder counts to track position from startup)
+- [ ] Change logic to move motors to absolute position rather than relative (possibly by using encoder counts to track position from startup)
 
 ## BLE Functions
 
-- Fix motor command ACK to send only when motors are finished moving, rather than immediately when command is received
+- [ ] Fix motor command ACK to send only when motors are finished moving, rather than immediately when command is received
