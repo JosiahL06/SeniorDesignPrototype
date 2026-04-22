@@ -1,8 +1,0 @@
-{
-    "configuration": "PartitionScheme=default,PinNumbers=default,USBMode=default",
-    "board": "arduino:esp32:nano_nora",
-    "programmer": "esptool",
-    "sketch": "FunctionalPrototype/FunctionalPrototype.ino",
-    "port": "COM4",
-    "output": "./build"
-}
