@@ -1,0 +1,24 @@
+# Build output
+build/
+**/build/
+*.o
+*.obj
+*.a
+*.so
+*.d
+*.elf
+*.bin
+*.hex
+*.map
+
+# Arduino-generated intermediates
+*.ino.cpp
+*.ino.cpp.d
+
+# VS Code local workspace settings
+.vscode/*
+!.vscode/extensions.json
+
+# OS clutter
+.DS_Store
+Thumbs.db
