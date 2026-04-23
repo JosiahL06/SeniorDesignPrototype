@@ -10,7 +10,9 @@ const POSITION2_CHAR_UUID = "4f5cc7fd-1f5c-4aab-82fb-0d6f3dbe7b2b";
 const ACCESS_PASSWORD = "Pocki06";
 
 const COUNTS_PER_REVOLUTION = 1727 * 2;
-const LIFT_MM_PER_REVOLUTION = 8;
+const MOMENT_ARM_MM = 150;
+const POSITION1_SIGN = 1;
+const POSITION2_SIGN = -1;
 
 // ACK status codes
 const ACK_SUCCESS = 0x00;
@@ -181,9 +183,7 @@ function updateUI() {
 
 function updateUserViewControls() {
     const userStepInput = document.getElementById("user-step-mm-input");
-    const userStepHint = document.getElementById("user-step-mm-hint");
     const userTargetInput = document.getElementById("user-target-mm-input");
-    const userTargetHint = document.getElementById("user-target-mm-hint");
     const userStartBtn = document.getElementById("user-start-btn");
     const userFeedback = document.getElementById("user-feedback");
     const progressEl = document.getElementById("user-rotation-progress");
@@ -192,9 +192,7 @@ function updateUserViewControls() {
     const remainingMm = Math.max(0, userViewTargetMm - userViewCommandedTotalMm);
     const canRun = connected && !userViewMotorCommandPending && remainingMm >= userViewStepMm;
 
-    progressEl.textContent = `Total commanded: ${userViewCommandedTotalMm.toFixed(1)} mm / ${userViewTargetMm.toFixed(1)} mm`;
-    userStepHint.textContent = `${userViewStepMm.toFixed(1)} mm per actuation`;
-    userTargetHint.textContent = `${userViewTargetMm.toFixed(1)} mm target`;
+    progressEl.textContent = `Total Sternum plate lift: ${userViewCommandedTotalMm.toFixed(1)} mm / ${userViewTargetMm.toFixed(1)} mm`;
     graphTargetLabel.textContent = `Target: ${userViewTargetMm.toFixed(1)} mm`;
 
     userStepInput.value = String(userViewStepMm);
@@ -484,7 +482,9 @@ async function startUserViewActuation() {
     motorTestRunning = true;
     updateUI();
 
-    const userStepDeg = mmToDegrees(userViewStepMm);
+    const currentLiftMm = Math.max(-MOMENT_ARM_MM, Math.min(MOMENT_ARM_MM, userViewCommandedTotalMm));
+    const nextLiftMm = Math.max(-MOMENT_ARM_MM, Math.min(MOMENT_ARM_MM, nextTotalMm));
+    const userStepDeg = mmToDegrees(nextLiftMm) - mmToDegrees(currentLiftMm);
     const motorDegrees = Math.max(1, Math.round(Math.abs(userStepDeg)));
 
     const sent = await sendCommandPacket(START_MOTOR, {
@@ -926,8 +926,9 @@ function updatePositionDisplay(pairNumber, positionCounts) {
     const userAngleEl = document.getElementById(`user-position${pairNumber}-angle`);
     const userCountsEl = document.getElementById(`user-position${pairNumber}-counts`);
 
-    const degrees = countsToDegrees(positionCounts);
-    const distanceMm = countsToMillimeters(positionCounts);
+    const normalizedCounts = normalizePositionCounts(pairNumber, positionCounts);
+    const degrees = countsToDegrees(normalizedCounts);
+    const distanceMm = countsToMillimeters(normalizedCounts);
     const signedDegrees = formatDegrees(degrees);
     const signedDistance = formatDistance(distanceMm);
 
@@ -943,10 +944,10 @@ function updatePositionDisplay(pairNumber, positionCounts) {
 function getCentralPlateLiftMm() {
     const leftMm = trackedPosition1Counts === null
         ? null
-        : countsToMillimeters(trackedPosition1Counts);
+        : countsToMillimeters(normalizePositionCounts(1, trackedPosition1Counts));
     const rightMm = trackedPosition2Counts === null
         ? null
-        : countsToMillimeters(trackedPosition2Counts);
+        : countsToMillimeters(normalizePositionCounts(2, trackedPosition2Counts));
 
     if (leftMm === null && rightMm === null) {
         return null;
@@ -964,6 +965,11 @@ function getCentralPlateLiftMm() {
     return (leftMm + rightMm) / 2;
 }
 
+function normalizePositionCounts(pairNumber, positionCounts) {
+    const sign = pairNumber === 2 ? POSITION2_SIGN : POSITION1_SIGN;
+    return positionCounts * sign;
+}
+
 function countsToDegrees(positionCounts) {
     const degrees = (positionCounts / COUNTS_PER_REVOLUTION) * 360;
     const wrappedDegrees = degrees % 360;
@@ -977,11 +983,13 @@ function formatDegrees(degrees) {
 }
 
 function countsToMillimeters(positionCounts) {
-    return (positionCounts / COUNTS_PER_REVOLUTION) * LIFT_MM_PER_REVOLUTION;
+    const thetaRad = (countsToDegrees(positionCounts) * Math.PI) / 180;
+    return MOMENT_ARM_MM * Math.sin(thetaRad);
 }
 
 function mmToDegrees(mmValue) {
-    return (mmValue / LIFT_MM_PER_REVOLUTION) * 360;
+    const clampedMm = Math.max(-MOMENT_ARM_MM, Math.min(MOMENT_ARM_MM, mmValue));
+    return (Math.asin(clampedMm / MOMENT_ARM_MM) * 180) / Math.PI;
 }
 
 function formatDistance(mmValue) {
