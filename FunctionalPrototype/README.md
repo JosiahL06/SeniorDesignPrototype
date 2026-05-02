@@ -1,6 +1,5 @@
-# Functional Prototype Control Code
-
-## Overview
+# Functional Prototype Control Code Overview
+[Readme.md](https://github.com/JosiahL06/SeniorDesignPrototype/edit/main/FunctionalPrototype/README.md)
 
 This sketch runs the functional prototype motor controller on an Arduino Nano ESP32 board. It exposes a BLE interface for starting and stopping motor motion, streaming motor position updates, and collecting BLE timing metrics during test runs.
 
